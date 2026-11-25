@@ -17,7 +17,7 @@ An MCP server (stdio) for the [JLC EDA](https://www.jlc-ecad.com/editor) editor 
 
 ## Requirements
 
-- Node.js >= 22.13.0
+- Node.js >= 22.18.0
 
 ## Quick Start
 

@@ -2,6 +2,7 @@ import { getEditorUser } from '../api/user.js';
 import { getSessionFilePath } from '../config.js';
 import { DEFAULT_EDITOR_URL, watchEditorLogin } from '../cdp/login-watch.js';
 import { logDebug } from '../logger.js';
+import { SessionLoadError } from '../session.js';
 import { isRecord } from '../utils.js';
 import { loginWithEditorCookies, loginWithPassportCookies, type LoginResult } from './login.js';
 
@@ -22,7 +23,10 @@ export async function getCurrentEditorLogin(): Promise<LoginResult | null> {
     const result = await getEditorUser();
     const user = isRecord(result.data) ? (result.data.result ?? result.data.data ?? result.data) : result.data;
     return { ok: true, user, sessionPath: getSessionFilePath() };
-  } catch {
+  } catch (error) {
+    if (error instanceof SessionLoadError) {
+      throw error;
+    }
     return null;
   }
 }
@@ -30,7 +34,7 @@ export async function getCurrentEditorLogin(): Promise<LoginResult | null> {
 /**
  * Try every locally saved login before opening Chrome:
  *
- *   1. current session (env / ~/.jlc-ecad-mcp/session.json)
+ *   1. current session (env / <config-dir>/session.json)
  *   2. editor cookie snapshot (.jlc-ecad-mcp/editor-cookies.json)
  *   3. passport cookie snapshot (.jlc-ecad-mcp/passport-cookies.json)
  *      → check-login → code → /api/editor/login

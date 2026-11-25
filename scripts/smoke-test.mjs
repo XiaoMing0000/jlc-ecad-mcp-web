@@ -281,7 +281,13 @@ async function callTool(client) {
   await client.request('initialize', initialize);
   client.notify('notifications/initialized', {});
 
-  const loginCall = await client.request('tools/call', { name: 'jlc_ecad_login', arguments: {} });
+  const confirmPrompt = await client.request('tools/call', { name: 'jlc_ecad_login', arguments: {} });
+  assert.equal(confirmPrompt.result.isError, undefined);
+  assert.match(confirmPrompt.result.content[0].text, /explicit user confirmation/i);
+  assert.match(confirmPrompt.result.content[0].text, /npx -y jlc-ecad-mcp login/);
+  assert.match(confirmPrompt.result.content[0].text, /confirm.*true/i);
+
+  const loginCall = await client.request('tools/call', { name: 'jlc_ecad_login', arguments: { confirm: true } });
   assert.equal(loginCall.result.isError, undefined);
   assert.match(loginCall.result.content[0].text, /Already signed in/);
 

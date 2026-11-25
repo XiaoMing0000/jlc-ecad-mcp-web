@@ -282,7 +282,7 @@ Key `package.json` fields:
 - `name`: `jlc-ecad-mcp` (confirmed available on npm)
 - `bin`: `{ "jlc-ecad-mcp": "dist/index.js" }`
 - `files`: publish only `dist`, README, and LICENSE
-- `engines.node`: `>=22.13.0` (matches the build environment)
+- `engines.node`: `>=22.18.0` (matches the build environment)
 - `prepack`: force a build before packing / publishing
 
 ## 8. Security and Compliance

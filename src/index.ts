@@ -3,7 +3,7 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { runCdpCookiesCommand } from './cli/cdp-cookies.js';
 import { runLoginCommand } from './cli/login.js';
 import { runLogoutCommand } from './cli/logout.js';
-import { getPassportCookiesFilePath } from './config.js';
+import { getPassportCookiesFilePath, getSessionFilePath } from './config.js';
 import { DEFAULT_CDP_PORT } from './cdp/cookies.js';
 import { logDebug, logError, logInfo } from './logger.js';
 import { createServer } from './server.js';
@@ -36,7 +36,7 @@ CDP cookie options:
 Environment:
   JLC_ECAD_HOME                Config directory override
   JLC_ECAD_COOKIE             Full Cookie header (takes precedence)
-  JLC_ECAD_SESSION_FILE       Session file path (default: ~/.jlc-ecad-mcp/session.json)
+  JLC_ECAD_SESSION_FILE       Session file path (default: ${getSessionFilePath()})
   JLC_ECAD_PASSPORT_COOKIES_FILE  Passport cookie snapshot path
   JLC_ECAD_EDITOR_COOKIES_FILE    Editor cookie snapshot path
   JLC_ECAD_BASE_URL           JLC EDA base URL

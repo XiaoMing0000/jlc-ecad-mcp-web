@@ -1,6 +1,8 @@
 import { loginViaCdp } from '../auth/cdp-login.js';
 import { loginWithCookie, type LoginResult } from '../auth/login.js';
 import { getLoginTimeoutMs, getSessionFilePath } from '../config.js';
+import { DEFAULT_EDITOR_URL } from '../cdp/login-watch.js';
+import { SessionLoadError } from '../session.js';
 import { isRecord } from '../utils.js';
 import { readOptionValue } from './options.js';
 
@@ -123,6 +125,9 @@ export async function runLoginCommand(argv: string[]): Promise<number> {
 
   process.stdout.write('Signing in to JLC EDA...\n');
   process.stdout.write('Trying current session, saved editor cookies, and saved passport cookies; Chrome opens only if all fail.\n');
+  process.stdout.write(`If Chrome opens, sign in at: ${editorUrl ?? DEFAULT_EDITOR_URL}\n`);
+  process.stdout.write('Note: this uses a temporary Chrome profile; sign in in the newly opened window.\n');
+  process.stdout.write('Waiting for /api/editor/user...\n');
 
   try {
     const result = await loginViaCdp({
@@ -136,7 +141,11 @@ export async function runLoginCommand(argv: string[]): Promise<number> {
     return 0;
   } catch (error) {
     process.stderr.write(`Login failed: ${error instanceof Error ? error.message : String(error)}\n`);
-    process.stderr.write('Make sure Chrome is available and remote debugging is allowed; try --chrome <path> or --profile-dir <dir>.\n');
+    if (error instanceof SessionLoadError) {
+      process.stderr.write('Fix or remove the invalid session file, or run `jlc-ecad-mcp logout`.\n');
+    } else {
+      process.stderr.write('Make sure Chrome is available and remote debugging is allowed; try --chrome <path> or --profile-dir <dir>.\n');
+    }
     return 1;
   }
 }

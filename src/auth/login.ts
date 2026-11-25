@@ -253,13 +253,33 @@ function captureSetCookies(headers: Headers, cookies: Map<string, string>): void
       continue;
     }
 
-    const expired = attributes.slice(1).some((attribute) => /^\s*max-age=0\s*$/i.test(attribute));
+    const expired = isExpiredSetCookie(attributes.slice(1));
     if (value === '' || expired) {
       cookies.delete(name);
     } else {
       cookies.set(name, value);
     }
   }
+}
+
+/** Max-Age takes precedence over Expires, per RFC 6265. */
+function isExpiredSetCookie(attributes: string[]): boolean {
+  for (const attribute of attributes) {
+    const maxAge = attribute.match(/^\s*max-age\s*=\s*(-?\d+)\s*$/i);
+    if (maxAge) {
+      return Number(maxAge[1]) <= 0;
+    }
+  }
+
+  for (const attribute of attributes) {
+    const expires = attribute.match(/^\s*expires\s*=\s*(.+)$/i);
+    if (expires) {
+      const time = Date.parse(expires[1]);
+      return Number.isFinite(time) && time <= Date.now();
+    }
+  }
+
+  return false;
 }
 
 function tryParseJson(text: string): unknown {

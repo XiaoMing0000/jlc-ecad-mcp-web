@@ -2,9 +2,11 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import { loginViaCdp, trySavedLogin } from '../auth/cdp-login.js';
 import type { LoginResult } from '../auth/login.js';
+import { findChromeBinary } from '../cdp/chrome.js';
 import { DEFAULT_EDITOR_URL } from '../cdp/login-watch.js';
 import { getLoginTimeoutMs } from '../config.js';
-import { logDebug, logInfo } from '../logger.js';
+import { logDebug, logError, logInfo } from '../logger.js';
+import { SessionLoadError } from '../session.js';
 
 let activeLogin: Promise<unknown> | null = null;
 
@@ -42,11 +44,27 @@ export function registerAuthTools(server: McpServer): void {
           return successResponse(saved);
         }
       } catch (error) {
-        logDebug(`Saved credential check failed: ${error instanceof Error ? error.message : String(error)}`);
+        if (error instanceof SessionLoadError) {
+          logError(`Invalid session file: ${error.message}`);
+        } else {
+          logDebug(`Saved credential check failed: ${error instanceof Error ? error.message : String(error)}`);
+        }
       }
 
       if (activeLogin) {
         return { content: [{ type: 'text', text: inProgressText() }] };
+      }
+
+      // Fail fast with a real error instead of claiming a window will open.
+      try {
+        await findChromeBinary();
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        logError(`Cannot start JLC EDA login: ${message}`);
+        return {
+          isError: true,
+          content: [{ type: 'text', text: `Cannot start JLC EDA login: ${message}` }],
+        };
       }
 
       activeLogin = loginViaCdp({ timeoutMs: getLoginTimeoutMs(), skipFastPath: true })
@@ -55,7 +73,7 @@ export function registerAuthTools(server: McpServer): void {
           return result;
         })
         .catch((error: unknown) => {
-          logDebug(`JLC EDA login failed: ${error instanceof Error ? error.message : String(error)}`);
+          logError(`JLC EDA login failed: ${error instanceof Error ? error.message : String(error)}`);
           throw error;
         })
         .finally(() => {

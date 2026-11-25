@@ -282,7 +282,7 @@ npm publish --access public
 - `name`: `jlc-ecad-mcp`（已确认 npm 上未被占用）
 - `bin`: `{ "jlc-ecad-mcp": "dist/index.js" }`
 - `files`: 只发布 `dist`、README、LICENSE
-- `engines.node`: `>=22.13.0`（与构建环境一致）
+- `engines.node`: `>=22.18.0`（与构建环境一致）
 - `prepack`: 发布 / 打包前强制构建
 
 ## 8. 安全与合规

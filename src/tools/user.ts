@@ -1,6 +1,7 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { JlcEcadApiError } from '../api/errors.js';
 import { getEditorUser } from '../api/user.js';
+import { getSessionFilePath } from '../config.js';
 import { logDebug } from '../logger.js';
 
 export function registerUserTools(server: McpServer): void {
@@ -11,7 +12,7 @@ export function registerUserTools(server: McpServer): void {
       description:
         'Get the profile of the currently logged-in JLC EDA (jlc-ecad.com) user by calling GET /api/editor/user. ' +
         'Returns the raw JSON response from the JLC EDA editor backend. ' +
-        'Authentication uses cookies stored locally via JLC_ECAD_COOKIE or ~/.jlc-ecad-mcp/session.json. ' +
+        `Authentication uses cookies stored locally via JLC_ECAD_COOKIE or ${getSessionFilePath()}. ` +
         'If no valid session is available, ask the user whether they want to sign in. Preferred: run ' +
         '`npx -y jlc-ecad-mcp login` (or `node dist/index.js login` from the repository) in a terminal, then call this tool again. ' +
         'If the client cannot run shell commands, call jlc_ecad_login with {"confirm": true}.',

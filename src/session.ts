@@ -34,7 +34,7 @@ export class SessionSaveError extends Error {
  * Priority:
  *   1. JLC_ECAD_COOKIE
  *   2. JLC_ECAD_SESSION_FILE
- *   3. ~/.jlc-ecad-mcp/session.json
+ *   3. <config-dir>/session.json
  *
  * Returns null when no session is configured. `loadSession` is called on every
  * request so a future login flow can write the file without restarting the

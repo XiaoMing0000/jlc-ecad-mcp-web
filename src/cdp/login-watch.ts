@@ -5,7 +5,7 @@ import { gunzipSync } from 'node:zlib';
 import { getEditorCookiesFilePath, getPassportCookiesFilePath } from '../config.js';
 import { saveSession } from '../session.js';
 import { isRecord } from '../utils.js';
-import { closeChrome, delay, findChromeBinary, getFreePort, launchChrome, listPageTargets, waitForChrome, type PageTarget } from './chrome.js';
+import { closeChrome, delay, findChromeBinary, launchChrome, listPageTargets, readDevToolsPort, waitForChrome, type PageTarget } from './chrome.js';
 import { CdpClient } from './client.js';
 import { cookieDomainMatchesHost, readAllCookiesViaCdp, saveCookieSnapshot, selectCookiesForUrl } from './cookies.js';
 
@@ -42,18 +42,19 @@ interface NetworkLoadingFinished {
  * https://www.jlc-ecad.com/api/editor/user response, then save:
  *
  *   - passport.jlc.com cookies to ./.jlc-ecad-mcp/passport-cookies.json
- *   - www.jlc-ecad.com cookies to ~/.jlc-ecad-mcp/session.json
+ *   - www.jlc-ecad.com cookies to <config-dir>/session.json
  *
  * The Chrome window is closed afterwards.
  */
 export async function watchEditorLogin(options: WatchLoginOptions = {}): Promise<WatchLoginResult> {
   const editorUrl = options.editorUrl ?? DEFAULT_EDITOR_URL;
   const timeoutMs = options.timeoutMs ?? DEFAULT_WATCH_TIMEOUT_MS;
-  const port = options.chromePort ?? (await getFreePort());
+  const requestedPort = options.chromePort;
   const binary = await findChromeBinary(options.chromeBinary);
   const profileDir = options.profileDir ?? (await mkdtemp(join(tmpdir(), 'jlc-cdp-login-')));
   const ownsProfile = options.profileDir === undefined;
 
+  let port = requestedPort ?? 0;
   const { child, stderr } = launchChrome({ binary, port, userDataDir: profileDir, url: editorUrl });
 
   let settled = false;
@@ -153,6 +154,9 @@ export async function watchEditorLogin(options: WatchLoginOptions = {}): Promise
   });
 
   try {
+    if (port === 0) {
+      port = await readDevToolsPort(profileDir, child);
+    }
     await waitForChrome(port, child);
   } catch (error) {
     fail(error instanceof Error ? error : new Error(String(error)));
@@ -197,7 +201,7 @@ export async function watchEditorLogin(options: WatchLoginOptions = {}): Promise
 
       const matched = new Set<string>();
       client.onEvent<NetworkResponseReceived>('Network.responseReceived', (params) => {
-        if (isEditorUserUrl(params.response.url)) {
+        if (isEditorUserUrl(params.response.url, editorUrl)) {
           matched.add(params.requestId);
         }
       });
@@ -244,13 +248,13 @@ export async function watchEditorLogin(options: WatchLoginOptions = {}): Promise
   return resultPromise;
 }
 
-function isEditorUserUrl(rawUrl: string): boolean {
+function isEditorUserUrl(rawUrl: string, editorUrl: string): boolean {
   try {
     const url = new URL(rawUrl);
-    const host = url.hostname.toLowerCase();
+    const editor = new URL(editorUrl);
     return (
-      url.protocol === 'https:' &&
-      (host === 'www.jlc-ecad.com' || host === 'jlc-ecad.com') &&
+      url.protocol === editor.protocol &&
+      url.host.toLowerCase() === editor.host.toLowerCase() &&
       (url.pathname === '/api/editor/user' || url.pathname === '/api/editor/user/')
     );
   } catch {

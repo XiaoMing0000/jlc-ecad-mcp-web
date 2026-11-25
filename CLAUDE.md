@@ -8,7 +8,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Hard constraints:
 
-- Node.js >= 22.13.0 (the code relies on global `fetch`, `WebSocket`, `AbortSignal.timeout`).
+- Node.js >= 22.18.0 (the code relies on global `fetch`, `WebSocket`, `AbortSignal.timeout`).
 - When running as an MCP server, **stdout is reserved for JSON-RPC**. All logging must go through `src/logger.ts` (stderr); never use `console.log` in `src/`.
 - The JLC API has no public documentation. Endpoint paths and response shapes were discovered from the editor frontend bundle (`ecad.js`); pass raw JSON through and avoid tight coupling to fields.
 - Authentication is **cookie-only**; the editor does not send an `Authorization` header.
@@ -133,7 +133,7 @@ There is no unit-test framework. `scripts/smoke-test.mjs` is the only automated 
 
 ### Build and packaging
 
-- `config/esbuild.config.ts` deletes `dist/` and bundles `src/index.ts` into a minified ESM `dist/index.js` with the shebang. Dev mode adds sourcemaps, a `createRequire` banner, and a rebuild/restart plugin. The build config is TypeScript run directly by Node; Node 22.13–22.17 need `--experimental-strip-types`, while this workspace has been developed on Node 26.
+- `config/esbuild.config.ts` deletes `dist/` and bundles `src/index.ts` into a minified ESM `dist/index.js` with the shebang. Dev mode adds sourcemaps, a `createRequire` banner, and a rebuild/restart plugin. The build config is TypeScript run directly by Node; the package requires Node >= 22.18.0 where type stripping is enabled by default.
 - `src/version.ts` reads `../package.json` relative to `import.meta.url`; keep the `dist/index.js` ↔ `package.json` layout when changing build output.
 - `dist/` and the legacy project-local `.jlc-ecad-mcp/` directory are gitignored. `package.json` `files` publishes only `dist`, READMEs, and LICENSE; `prepack` runs the build.
 - `.mcp.json` runs `node dist/index.js`, so build before using the project-scoped MCP server.

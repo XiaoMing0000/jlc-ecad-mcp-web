@@ -1,6 +1,5 @@
 import { spawn, type ChildProcess } from 'node:child_process';
-import { access } from 'node:fs/promises';
-import { createServer } from 'node:net';
+import { access, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { CdpClient } from './client.js';
 
@@ -29,8 +28,16 @@ export interface LaunchedChrome {
 
 /** Locate a Chrome/Chromium executable. JLC_CDP_CHROME or --chrome overrides it. */
 export async function findChromeBinary(explicit?: string): Promise<string> {
+  if (explicit) {
+    try {
+      await access(explicit);
+      return explicit;
+    } catch {
+      throw new Error(`Chrome executable not found: ${explicit}`);
+    }
+  }
+
   const candidates = [
-    explicit,
     process.env.JLC_CDP_CHROME,
     '/opt/google/chrome/chrome',
     '/usr/bin/google-chrome',
@@ -60,23 +67,7 @@ export async function findChromeBinary(explicit?: string): Promise<string> {
   throw new Error('Chrome executable not found. Set JLC_CDP_CHROME or pass --chrome <path>.');
 }
 
-/** Allocate a free loopback TCP port. */
-export async function getFreePort(): Promise<number> {
-  const server = createServer();
-  await new Promise<void>((resolve, reject) => {
-    server.once('error', reject);
-    server.listen(0, '127.0.0.1', resolve);
-  });
-  const address = server.address();
-  await new Promise<void>((resolve) => server.close(() => resolve()));
-
-  if (!address || typeof address === 'string') {
-    throw new Error('Could not allocate a local port for Chrome DevTools.');
-  }
-  return address.port;
-}
-
-/** Launch Chrome with remote debugging and the given URL. */
+/** Launch Chrome with remote debugging and the given URL. Port 0 lets Chrome choose. */
 export function launchChrome(options: ChromeLaunchOptions): LaunchedChrome {
   const child = spawn(
     options.binary,
@@ -103,29 +94,80 @@ export function launchChrome(options: ChromeLaunchOptions): LaunchedChrome {
   return { child, stderr: () => stderr };
 }
 
-/** Wait until the DevTools HTTP endpoint responds. */
-export async function waitForChrome(port: number, child: ChildProcess, timeoutMs = 20_000): Promise<void> {
+/**
+ * Read the actual DevTools port from <user-data-dir>/DevToolsActivePort.
+ * Used when Chrome is started with --remote-debugging-port=0.
+ */
+export async function readDevToolsPort(userDataDir: string, child: ChildProcess, timeoutMs = 20_000): Promise<number> {
+  const filePath = join(userDataDir, 'DevToolsActivePort');
   const deadline = Date.now() + timeoutMs;
 
   while (Date.now() < deadline) {
-    if (child.exitCode !== null) {
-      throw new Error(`Chrome exited before DevTools became available (code ${child.exitCode}).`);
+    if (child.pid === undefined) {
+      throw new Error('Chrome failed to start.');
+    }
+    if (child.exitCode !== null || child.signalCode !== null) {
+      throw new Error(`Chrome exited before writing DevToolsActivePort (code ${child.exitCode ?? child.signalCode}).`);
     }
 
     try {
-      const response = await fetch(`http://127.0.0.1:${port}/json/version`, {
-        signal: AbortSignal.timeout(1_000),
-      });
-      if (response.ok) {
-        return;
+      const content = await readFile(filePath, 'utf8');
+      const [firstLine] = content.split(/\r?\n/);
+      const port = Number(firstLine);
+      if (Number.isInteger(port) && port > 0) {
+        return port;
       }
     } catch {
-      // Retry until the deadline.
+      // Chrome has not written the file yet.
     }
 
-    await delay(200);
+    await delay(100);
   }
 
+  throw new Error('Timed out waiting for Chrome to write DevToolsActivePort.');
+}
+
+/** Wait until the DevTools HTTP endpoint responds. */
+export async function waitForChrome(port: number, child: ChildProcess, timeoutMs = 20_000): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  let spawnError: Error | undefined;
+  const onError = (error: Error): void => {
+    spawnError = error;
+  };
+  child.once('error', onError);
+
+  try {
+    while (Date.now() < deadline) {
+      if (spawnError) {
+        throw spawnError;
+      }
+      if (child.pid === undefined) {
+        throw new Error('Chrome failed to start.');
+      }
+      if (child.exitCode !== null || child.signalCode !== null) {
+        throw new Error(`Chrome exited before DevTools became available (code ${child.exitCode ?? child.signalCode}).`);
+      }
+
+      try {
+        const response = await fetch(`http://127.0.0.1:${port}/json/version`, {
+          signal: AbortSignal.timeout(1_000),
+        });
+        if (response.ok) {
+          return;
+        }
+      } catch {
+        // Retry until the deadline.
+      }
+
+      await delay(200);
+    }
+  } finally {
+    child.off('error', onError);
+  }
+
+  if (spawnError) {
+    throw spawnError;
+  }
   throw new Error(`Timed out waiting for Chrome DevTools on 127.0.0.1:${port}.`);
 }
 
