@@ -1,21 +1,39 @@
 {
-  "name": "nodejs-falsework",
+  "name": "jlc-ecad-mcp",
   "version": "1.0.0",
-  "description": "",
+  "description": "MCP server (stdio) for the JLC EDA (jlc-ecad.com) editor backend API.",
   "type": "module",
-  "main": "index.js",
+  "main": "./dist/index.js",
+  "exports": {
+    ".": "./dist/index.js"
+  },
+  "bin": {
+    "jlc-ecad-mcp": "./dist/index.js"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "README.en.md",
+    "LICENSE"
+  ],
   "license": "MIT",
-  "author": "xiaoming0000",
+  "author": {
+    "name": "xiaoming0000",
+    "email": "chidao0001@gmail.com"
+  },
   "packageManager": "pnpm@11.23.0",
   "engines": {
-    "node": ">=22.13.0",
-    "pnpm": ">=11.23.0"
+    "node": ">=22.13.0"
+  },
+  "publishConfig": {
+    "access": "public"
   },
   "scripts": {
     "dev": "node --watch ./config/esbuild.config.ts --dev",
     "dev:unwatch": "tsx src/index.ts",
     "build": "node ./config/esbuild.config.ts",
     "start": "node ./dist/index.js",
+    "smoke": "pnpm run build && node scripts/smoke-test.mjs",
     "tsc": "tsc",
     "tsc:check": "tsc --noEmit",
     "fmt": "oxfmt",
@@ -23,12 +41,11 @@
     "lint": "oxlint",
     "lint:fix": "oxlint --fix",
     "lint:check": "oxlint && pnpm run tsc:check",
-    "prepare": "simple-git-hooks"
-  },
-  "dependencies": {
-    "dotenv": "^17.2.3"
+    "prepack": "pnpm run build",
+    "hooks": "simple-git-hooks"
   },
   "devDependencies": {
+    "@modelcontextprotocol/sdk": "^1.32.2",
     "@types/node": "^25.9.3",
     "esbuild": "^0.28.1",
     "jiti": "^2.7.0",
@@ -38,7 +55,8 @@
     "simple-git-hooks": "^2.13.1",
     "ts-node": "^10.9.2",
     "tsx": "^4.22.4",
-    "typescript": "^6.0.3"
+    "typescript": "^6.0.3",
+    "zod": "^4.6.7"
   },
   "simple-git-hooks": {
     "pre-commit": "pnpm exec lint-staged",
@@ -51,13 +69,20 @@
       "pnpm run lint:fix"
     ]
   },
-  "keywords": [],
-  "homepage": "https://github.com/XiaoMing0000/nodejs-falseworkCode#readme",
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "jlc",
+    "jlc-ecad",
+    "jlc-ecad-mcp",
+    "claude"
+  ],
+  "homepage": "https://github.com/XiaoMing0000/jlc-ecad-mcp-web#readme",
   "bugs": {
-    "url": "https://github.com/XiaoMing0000/nodejs-falsework/issues"
+    "url": "https://github.com/XiaoMing0000/jlc-ecad-mcp-web/issues"
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/XiaoMing0000/nodejs-falsework.git"
+    "url": "git+https://github.com/XiaoMing0000/jlc-ecad-mcp-web.git"
   }
 }

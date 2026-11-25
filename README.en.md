@@ -1,143 +1,254 @@
-# nodejs-falsework
+# jlc-ecad-mcp
 
 English | [简体中文](./README.md)
 
-An out-of-the-box Node.js + TypeScript scaffold with development, build, linting, and Git hooks preconfigured—so you can start a backend project quickly.
+An MCP server (stdio) for the [JLC EDA](https://www.jlc-ecad.com/editor) editor backend API.
+
+> Current version `0.3.0` (M2): Chrome CDP login, local session storage, and `GET /api/editor/user`. More endpoints are on the [roadmap](https://github.com/XiaoMing0000/jlc-ecad-mcp-web/blob/main/docs/PLAN.en.md) ([中文计划](https://github.com/XiaoMing0000/jlc-ecad-mcp-web/blob/main/docs/PLAN.md)).
 
 ## Features
 
-- **TypeScript 6** — Strict mode, targeting the Node.js runtime
-- **esbuild** — Fast bundling, outputs CommonJS artifacts to `dist/`
-- **nodemon + ts-node** — Auto-restart during development
-- **ESLint + typescript-eslint** — Code quality checks
-- **Prettier** — Consistent code formatting
-- **simple-git-hooks** — Lint on commit, format on push
-- **dotenv** — Environment variable support
+- stdio MCP server compatible with Claude Desktop, Claude Code, Cursor, and other MCP clients.
+- Calls `https://www.jlc-ecad.com/api/editor/*` directly, without browser automation.
+- **CDP login**: opens the JLC editor page, watches `/api/editor/user`, and saves both `passport.jlc.com` and `www.jlc-ecad.com` cookies.
+- Reads login cookies from an environment variable or a local `session.json` and sends them with every request.
+- Returns actionable login instructions when the session is missing or expired instead of crashing.
+- Request timeouts, gzip decoding, JSON parsing, and business error-code handling.
 
 ## Requirements
 
-| Tool    | Version    |
-| ------- | ---------- |
-| Node.js | >= 22.13.0 |
-| pnpm    | >= 9.15.0  |
+- Node.js >= 22.13.0
 
 ## Quick Start
 
-```bash
-# Clone the repository
-git clone https://github.com/XiaoMing0000/nodejs-falsework.git
-cd nodejs-falsework
+### 1. Configure your MCP client
 
-# Install dependencies
+**Claude Code:**
+
+```bash
+claude mcp add jlc-ecad -- npx -y jlc-ecad-mcp
+```
+
+**Claude Desktop / Cursor (`mcpServers` config):**
+
+```json
+{
+  "mcpServers": {
+    "jlc-ecad": {
+      "command": "npx",
+      "args": ["-y", "jlc-ecad-mcp"]
+    }
+  }
+}
+```
+
+### 2. Sign in
+
+**Option A: CLI login (recommended)**
+
+```bash
+npx -y jlc-ecad-mcp login
+```
+
+Flow:
+
+1. Call `GET /api/editor/user` with the current session; if it succeeds, finish.
+2. Otherwise call `GET /api/editor/user` with `<config-dir>/editor-cookies.json`; if it succeeds, save the session and finish.
+3. Otherwise use `<config-dir>/passport-cookies.json`:
+   - `POST https://passport.jlc.com/api/cas/sso/check-login` with `{"appId":"jlc_fa_ecad"}`
+   - If a code such as `AC-xxxx` is returned, call `GET https://www.jlc-ecad.com/api/editor/login?code=...`
+   - Save the response cookies to `<config-dir>/editor-cookies.json` and `<config-dir>/session.json`
+   - Validate with `/api/editor/user`; finish if it passes
+4. If everything above fails, launch Chrome via CDP at <https://www.jlc-ecad.com/editor> and let the user sign in.
+   Watch `https://www.jlc-ecad.com/api/editor/user`; after a signed-in response, save to `<config-dir>`:
+   - `passport.jlc.com` cookies → `passport-cookies.json`
+   - `www.jlc-ecad.com` cookies → `editor-cookies.json`
+   - `www.jlc-ecad.com` session → `session.json`
+     then close Chrome.
+
+Options:
+
+```bash
+npx -y jlc-ecad-mcp login --timeout 600          # Chrome login wait timeout in seconds (default: 300)
+npx -y jlc-ecad-mcp login --profile-dir /tmp/jlc-cdp  # reuse a Chrome profile
+npx -y jlc-ecad-mcp login --chrome /path/to/chrome    # Chrome executable
+npx -y jlc-ecad-mcp login --login-url "https://www.jlc-ecad.com/editor"
+npx -y jlc-ecad-mcp login --cookie "VEN-SESSION=...; VEN-CSRF=..."  # manual Cookie
+```
+
+> `--cookie` exposes the cookie in shell history; prefer `JLC_ECAD_COOKIE` or the session file for regular use.
+> Chrome 136+ may require a non-default `--user-data-dir` for remote debugging; `login` uses a temporary profile by default and `--profile-dir` can reuse an existing one.
+
+**Option B: call the `jlc_ecad_login` tool when the CLI is unavailable**
+
+If the client can run shell commands, prefer Option A. If not, use this tool. It requires explicit user confirmation: a call without `confirm` only returns a confirmation prompt and does not start login. After the user agrees, call it with `{"confirm": true}`. It tries the current session, saved editor cookies, and saved passport cookies + `check-login`; only if all fail does it open the editor page via CDP. After signing in, call `jlc_ecad_get_user`.
+
+**Option C: provide the cookie manually**
+
+1. Open <https://www.jlc-ecad.com/editor> in a browser and sign in.
+2. Press `F12` and copy the `Cookie` request header from **Application → Cookies** or **Network**.
+3. Set `JLC_ECAD_COOKIE`, or save the cookie to the session file:
+
+```bash
+# Linux / macOS
+mkdir -p ~/Documents/JLC-ECAD/jlc-ecad-mcp-web
+chmod 700 ~/Documents/JLC-ECAD/jlc-ecad-mcp-web
+cat > ~/Documents/JLC-ECAD/jlc-ecad-mcp-web/session.json <<'EOF'
+{"version":1,"cookie":"VEN-SESSION=...; VEN-CSRF=...; ..."}
+EOF
+chmod 600 ~/Documents/JLC-ECAD/jlc-ecad-mcp-web/session.json
+
+# Windows: %USERPROFILE%\Documents\JLC-ECAD\jlc-ecad-mcp-web\session.json
+```
+
+The cookie is an account credential. Do not commit it to Git or share it.
+
+### Optional: read passport cookies from an existing Chrome (CDP)
+
+`login` launches Chrome only when all local credentials fail. If you already have a Chrome instance with remote debugging, `cdp-cookies` can read the snapshot separately:
+
+```bash
+google-chrome --remote-debugging-port=9222 --remote-allow-origins=* \
+  --user-data-dir=/tmp/jlc-cdp https://www.jlc-ecad.com/editor
+
+node dist/index.js cdp-cookies --port 9222
+```
+
+The default output is `~/Documents/JLC-ECAD/jlc-ecad-mcp-web/passport-cookies.json` (`0600`). Override with `--domain`, `--host`, `--port`, or `--output`.
+
+### 3. Use it
+
+Ask the model to call `jlc_ecad_get_user`.
+
+### Sign out
+
+```bash
+npx -y jlc-ecad-mcp logout
+```
+
+This removes the following files from the current config directory and legacy locations:
+
+```text
+session.json
+passport-cookies.json
+editor-cookies.json
+```
+
+`logout` only clears local credentials; it does not sign out the browser or invalidate the JLC server-side session. To fully sign out, also log out of the JLC site in your browser. If `JLC_ECAD_COOKIE` is set, unset it as well.
+
+## Tools
+
+| Tool                | Description                                                                          |
+| ------------------- | ------------------------------------------------------------------------------------ |
+| `jlc_ecad_login`    | Fallback when the CLI cannot run; requires user confirmation and `{"confirm": true}` |
+| `jlc_ecad_get_user` | Calls `GET /api/editor/user` and returns the raw user JSON response                  |
+
+## Configuration
+
+| Environment variable             | Required | Default                                 | Description                               |
+| -------------------------------- | -------- | --------------------------------------- | ----------------------------------------- |
+| `JLC_ECAD_HOME`                  | No       | `~/Documents/JLC-ECAD/jlc-ecad-mcp-web` | Override the whole config directory       |
+| `JLC_ECAD_COOKIE`                | No       | -                                       | Full cookie string, highest priority      |
+| `JLC_ECAD_SESSION_FILE`          | No       | `<config-dir>/session.json`             | Session file path                         |
+| `JLC_ECAD_BASE_URL`              | No       | `https://www.jlc-ecad.com`              | API base URL, mainly for tests or a proxy |
+| `JLC_ECAD_CAS_URL`               | No       | `https://passport.jlc.com`              | CAS check-login URL                       |
+| `JLC_ECAD_APP_ID`                | No       | `jlc_fa_ecad`                           | CAS application id                        |
+| `JLC_ECAD_TIMEOUT_MS`            | No       | `15000`                                 | Per-request timeout in milliseconds       |
+| `JLC_ECAD_LOGIN_TIMEOUT_MS`      | No       | `300000`                                | CDP login timeout in milliseconds         |
+| `JLC_ECAD_PASSPORT_COOKIES_FILE` | No       | `<config-dir>/passport-cookies.json`    | Passport cookie snapshot path             |
+| `JLC_ECAD_EDITOR_COOKIES_FILE`   | No       | `<config-dir>/editor-cookies.json`      | Editor cookie snapshot path               |
+| `JLC_ECAD_DEBUG`                 | No       | -                                       | Set to `1` to log debug output to stderr  |
+
+### Configuration directory
+
+The default user-level directory is shared by all clients (Claude Code, Codex, OpenCode, Hermes, etc.):
+
+```text
+Linux / macOS: ~/Documents/JLC-ECAD/jlc-ecad-mcp-web/
+Windows:       %USERPROFILE%\Documents\JLC-ECAD\jlc-ecad-mcp-web\
+```
+
+It contains:
+
+```text
+session.json
+passport-cookies.json
+editor-cookies.json
+```
+
+Directory permissions are `0700` and file permissions are `0600`. Override the whole directory with `JLC_ECAD_HOME`, or override individual files with the per-file environment variables. Legacy credentials under `~/.jlc-ecad-mcp/`, a project-local `.jlc-ecad-mcp/`, or the previous `~/Documents/JLC-ECAD/jlc-ecad-web-mcp/` directory are copied into the new directory on first read; the old files are not deleted.
+
+### Session file format
+
+```json
+{ "version": 1, "cookie": "VEN-SESSION=...; VEN-CSRF=...; ..." }
+```
+
+Per-cookie storage is also supported:
+
+```json
+{ "version": 1, "cookies": { "VEN-SESSION": "...", "VEN-CSRF": "..." } }
+```
+
+The file is read on every request, so no restart is needed after updating it. `chmod 600` is recommended.
+
+## Development
+
+```bash
 pnpm install
-
-# Set up environment variables (optional)
-cp .env.example .env
-
-# Start development server
-pnpm dev
+pnpm run hooks        # install simple-git-hooks (once after cloning)
+pnpm run build        # bundle to dist/index.js
+pnpm run smoke        # build + end-to-end test (includes the login flow)
+pnpm run dev:unwatch  # run directly over stdio with tsx
+pnpm run lint:check   # oxlint + tsc
+pnpm run fmt          # format
 ```
 
-## Scripts
+To run a local build, point the client at `node` and `dist/index.js`:
 
-| Command       | Description                                  |
-| ------------- | -------------------------------------------- |
-| `pnpm dev`    | Dev mode with file watching and auto-restart |
-| `pnpm build`  | Bundle with esbuild into `dist/`             |
-| `pnpm start`  | Run the built output                         |
-| `pnpm lint`   | Run ESLint and TypeScript type checking      |
-| `pnpm format` | Format code with Prettier                    |
-
-## Project Structure
-
-```
-nodejs-falsework/
-├── config/
-│   └── esbuild.config.mts   # esbuild build config (ESM)
-├── src/
-│   └── index.ts             # Application entry
-├── dist/                      # Build output
-├── eslint.config.ts           # ESLint config
-├── nodemon.json               # nodemon config
-├── tsconfig.json              # TypeScript config
-├── .env.example               # Environment variable template
-└── package.json
+```json
+{
+  "mcpServers": {
+    "jlc-ecad": {
+      "command": "node",
+      "args": ["/absolute/path/to/jlc-ecad-mcp/dist/index.js"]
+    }
+  }
+}
 ```
 
-## Environment Variables
-
-Copy `.env.example` to `.env` and fill in values as needed. `dotenv` is marked as external during the build and must be loaded at runtime from `node_modules`.
+Local login:
 
 ```bash
-cp .env.example .env
+node dist/index.js login
 ```
 
-Usage in code:
+## Login flow
 
-```ts
-import 'dotenv/config';
-
-console.log(process.env.MY_VAR);
+```text
+CLI / MCP tool
+  → 1. current session → GET /api/editor/user
+       success: done
+  → 2. <config-dir>/editor-cookies.json → GET /api/editor/user
+       success: save session, done
+  → 3. <config-dir>/passport-cookies.json
+       → POST /api/cas/sso/check-login {appId: jlc_fa_ecad}
+       → code returned: GET /api/editor/login?code=...
+       → save editor-cookies.json + session.json
+       → validate GET /api/editor/user; success: done
+  → 4. all failed: launch Chrome via CDP → open /editor → user signs in
+       → watch /api/editor/user
+       → save passport-cookies.json + editor-cookies.json + session.json
+       → close Chrome
 ```
 
-## Development & Build
+## Security
 
-### Development
-
-`pnpm dev` uses nodemon to watch TypeScript files under `src/` and runs them directly via ts-node—no manual compilation required.
-
-### Build
-
-`pnpm build` runs `config/esbuild.config.mts`, bundling `src/index.ts` into `dist/index.js` (CommonJS, minified).
-
-Production startup:
-
-```bash
-pnpm build
-pnpm start
-```
-
-## Code Quality
-
-### Lint
-
-`pnpm lint` runs:
-
-1. **ESLint** — Syntax and style checks (`typescript-eslint` recommended rules)
-2. **tsc --noEmit** — TypeScript type checking (undefined variables, type errors, etc.)
-
-> ESLint `recommended` does not include type-aware rules. Undefined identifiers are caught by `tsc`.
-
-### Formatting
-
-`pnpm format` formats project files with Prettier.
-
-### Git Hooks
-
-Configured via `simple-git-hooks`:
-
-| Hook         | Action                |
-| ------------ | --------------------- |
-| `pre-commit` | Runs `npm run lint`   |
-| `pre-push`   | Runs `npm run format` |
-
-Hooks are installed automatically after `pnpm install`. If they are missing, run:
-
-```bash
-npx simple-git-hooks
-```
-
-## Tech Stack
-
-| Category   | Dependencies              |
-| ---------- | ------------------------- |
-| Runtime    | Node.js                   |
-| Language   | TypeScript 6              |
-| Bundler    | esbuild                   |
-| Dev        | nodemon, ts-node, tsx     |
-| Linting    | ESLint, typescript-eslint |
-| Formatting | Prettier                  |
-| Env vars   | dotenv                    |
+- Login uses the Chrome DevTools Protocol; the debugging port is only used for a local temporary profile.
+- Remote debugging exposes browser control, so the Chrome instance is closed after login.
+- This tool only accesses JLC EDA endpoints on behalf of the user and does not bypass authentication.
+- Session cookies and both domain cookie snapshots stay on the local machine (`0600`) and are never logged or published with the npm package.
+- Endpoint paths come from the editor frontend bundle and may change when JLC EDA updates. Please open an issue if something breaks.
 
 ## License
 

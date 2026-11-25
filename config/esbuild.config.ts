@@ -18,7 +18,6 @@ let commonOptions: esbuild.BuildOptions = {
   format: 'esm',
   sourcemap: false,
   minify: true,
-  external: ['dotenv'],
 };
 
 /** 构建成功后运行产物；再次构建时先杀掉旧进程 */

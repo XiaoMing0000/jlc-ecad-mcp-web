@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "jlc-ecad": {
+      "type": "stdio",
+      "command": "node",
+      "args": ["dist/index.js"],
+      "env": {
+        "JLC_ECAD_COOKIE": "${JLC_ECAD_COOKIE:-}"
+      }
+    }
+  }
+}
