@@ -4,10 +4,10 @@ import * as esbuild from 'esbuild';
 
 await rm('./dist', { recursive: true, force: true });
 
-// 运行产物路径
+// Build output path
 const runIndex = './dist/index.js';
 
-// 构建入口
+// Build entry
 let commonOptions: esbuild.BuildOptions = {
   entryPoints: { index: 'src/index.ts' },
   outdir: './dist/',
@@ -20,7 +20,7 @@ let commonOptions: esbuild.BuildOptions = {
   minify: true,
 };
 
-/** 构建成功后运行产物；再次构建时先杀掉旧进程 */
+/** Run the build output after a successful build; stop the old process before rebuilding */
 function createRestartOnRebuildPlugin(entries: string[]): esbuild.Plugin {
   let child: ChildProcess | undefined;
 
@@ -29,7 +29,7 @@ function createRestartOnRebuildPlugin(entries: string[]): esbuild.Plugin {
     child = undefined;
   };
 
-  // node --watch 重启配置进程时，顺带清掉业务子进程
+  // When node --watch restarts the config process, clean up the child process too
   process.once('SIGTERM', stop);
   process.once('SIGINT', stop);
   process.once('exit', stop);
@@ -51,8 +51,9 @@ if (process.argv.includes('--dev')) {
     ...commonOptions,
     sourcemap: true,
     minify: false,
-    // ESM 下没有全局 require；依赖（如 ws）被打进包后会走 esbuild 的 __require shim，
-    // 需注入 createRequire，否则运行时报 Dynamic require of "net" is not supported
+    // ESM has no global require; bundled dependencies (such as ws) use esbuild's
+    // __require shim, so createRequire must be injected or the runtime fails with
+    // Dynamic require of "net" is not supported.
     banner: {
       js: `import { createRequire } from 'module';const require = createRequire(import.meta.url);`,
     },

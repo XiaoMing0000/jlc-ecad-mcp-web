@@ -25,6 +25,7 @@ pnpm run fmt            # oxfmt; use pnpm run fmt:check for CI
 pnpm run smoke          # build + full end-to-end test (mock API, MCP stdio, login flows)
 pnpm run dev            # esbuild watch, rebuilds and restarts dist/index.js
 pnpm run dev:unwatch    # run src/index.ts directly via tsx
+node scripts/import-ecad-catalog.mjs [path/to/server.js]  # regenerate src/tools from the desktop app
 ```
 
 Run the CLI after building:
@@ -52,7 +53,7 @@ There is no unit-test framework. `scripts/smoke-test.mjs` is the only automated 
 
 - `pnpm run smoke` builds first, then runs the script.
 - It starts a local mock HTTP server and spawns `dist/index.js` as an MCP child, driving JSON-RPC over stdio.
-- Ten top-level scenarios cover: logged-out 401 guidance, `JLC_ECAD_COOKIE`, session-file cookies, raw gzip responses, the CLI current-session login, the MCP current-session login (confirmation gate), the editor-cookie fallback, the passport-cookie + check-login fallback, `JLC_ECAD_HOME` path resolution, and `logout` cleanup.
+- Eleven top-level scenarios cover: logged-out 401 guidance, `JLC_ECAD_COOKIE`, session-file cookies, raw gzip responses, imported catalog tools (GET query, path encoding, destructive confirmation), the CLI current-session login, the MCP current-session login (confirmation gate), the editor-cookie fallback, the passport-cookie + check-login fallback, `JLC_ECAD_HOME` path resolution, and `logout` cleanup.
 - There is no per-test filter/runner. To iterate on one scenario, run `pnpm run build` then `node scripts/smoke-test.mjs`, or temporarily comment out other scenario blocks.
 - The smoke test points `JLC_ECAD_BASE_URL` at the local mock; it never calls the real JLC services.
 
@@ -60,18 +61,31 @@ There is no unit-test framework. `scripts/smoke-test.mjs` is the only automated 
 
 ### Entry points and MCP layer
 
-- `src/index.ts` is both the MCP server entry and the CLI dispatcher. No subcommand → create `McpServer` and connect `StdioServerTransport`. Subcommands: `login`, `cdp-cookies`, `--help`, `--version`.
-- `src/server.ts` registers two tools:
-  - `jlc_ecad_get_user` (`src/tools/user.ts`) → `src/api/user.ts` → `src/api/client.ts`
-  - `jlc_ecad_login` (`src/tools/auth.ts`) → `src/auth/login.ts`
-- `src/tools/user.ts` returns the API's raw JSON. On errors it appends the backend `Response body` when available.
+- `src/index.ts` is both the MCP server entry and the CLI dispatcher. No subcommand → create the server and connect `StdioServerTransport`. Subcommands: `login`, `logout`, `cdp-cookies`, `--help`, `--version`.
+- `src/server.ts` uses the SDK's `McpServer` and registers 146 tools (42 hand-written + 104 imported). Every tool's `inputSchema` is a Zod schema: the hand-written tools declare it directly, and the importer generates Zod definitions (`z.looseObject`, `z.string`, `z.array`, ...) for the catalog. McpServer validates `tools/call` arguments and renders `tools/list` inputSchema from it:
+  - `jlc_ecad_get_user` (`src/tools/user.ts`) → `src/api/user.ts` → `src/api/client.ts`; the same file also registers `jlc_ecad_accept_user_agreement`, `jlc_ecad_get_user_logs`, `jlc_ecad_search_users`, `jlc_ecad_update_user`, and `jlc_ecad_get_user_by_uuid` → `GET|POST /api/editor/user*` → `src/api/client.ts`
+  - `jlc_ecad_login` / `jlc_ecad_logout` (`src/tools/auth.ts`) → `src/auth/login.ts` / `GET /api/editor/logout`
+  - `jlc_ecad_search_components` / `jlc_ecad_search_devices` (`src/tools/eda.ts`) → `POST /api/editor/eda/{components,devices}/searchByIds` → `src/api/client.ts`
+  - `jlc_ecad_order_part_bom`, `jlc_ecad_{add,update,delete,get}_part_production`, `jlc_ecad_search_public_parts` (`src/tools/parts-web.ts`) → `POST|DELETE|GET /api/editor/parts/*` → `src/api/client.ts`
+  - `jlc_ecad_get_product_filters`, `jlc_ecad_list_products`, `jlc_ecad_list_products_post`, `jlc_ecad_get_product_tree` (`src/tools/product.ts`) → `GET|POST /api/editor/product/*` → `src/api/client.ts`
+  - `jlc_ecad_get_official_account_qrcode`, `jlc_ecad_get_designer_rights`, `jlc_ecad_get_member_rights` (`src/tools/rights.ts`) → `GET /api/editor/erp/ecad/*` → `src/api/client.ts`
+  - `jlc_ecad_get_beta_status`, `jlc_ecad_join_beta_whitelist` (`src/tools/beta.ts`) → `GET|POST /api/editor/beta/*` → `src/api/client.ts`
+  - `jlc_ecad_create_category`, `jlc_ecad_list_categories`, `jlc_ecad_update_category`, `jlc_ecad_delete_category` (`src/tools/category.ts`) → `GET|POST /api/editor/categories*` → `src/api/client.ts`
+  - `jlc_ecad_upload_macro_data` (`src/tools/macro-upload.ts`) → `PUT /api/editor/macro/:uuid/macroDataUuid` (raw body, default `Content-Type: stream`) → `src/api/client.ts`
+  - `jlc_ecad_{add,remove}_team_member`, `jlc_ecad_create_team`, `jlc_ecad_delete_team`, `jlc_ecad_list_teams`, `jlc_ecad_get_team_logs`, `jlc_ecad_get_other_teams`, `jlc_ecad_get_team_info`, `jlc_ecad_transfer_team`, `jlc_ecad_update_team`, `jlc_ecad_update_team_member_{role,remark}` (`src/tools/team.ts`) → `GET|POST /api/editor/teams*` → `src/api/client.ts`
+  - 104 imported tools under `src/tools/*` → `src/ecad/executor.ts` → `src/api/client.ts`
+- `src/tools/user.ts` returns the API's raw JSON. On errors it appends the backend `Response body` when available; `src/tools/format.ts` is shared with the catalog executor.
+- The catalog is generated from the JLC ECAD desktop app by `scripts/import-ecad-catalog.mjs` into `src/tools/`; do not hand-edit the generated domain files. `src/tools/user.ts` (`jlc_ecad_get_user` and the user settings tools), `src/tools/auth.ts` (`jlc_ecad_login`, `jlc_ecad_logout`), `src/tools/eda.ts` (the two EDA searches), `src/tools/parts-web.ts` (web-only parts endpoints), `src/tools/product.ts` (product catalog endpoints), `src/tools/rights.ts` (ERP/member endpoints), `src/tools/beta.ts` (beta program), `src/tools/category.ts` (category endpoints), `src/tools/macro-upload.ts` (macro data upload), `src/tools/team.ts` (team management), and `src/tools/format.ts` are hand-written. The generated user-domain file is `src/tools/user-tools.ts` to avoid clashing with `user.ts`. The importer evaluates the desktop app's `var fx`…`var Bx` catalog in a VM, maps handlers to local Express route verbs, converts each JSON Schema into Zod code, and writes one file per domain. It also replaces every tool description and property description with an English translation that uses owner/UUID wording instead of the desktop app's local file/directory details; a missing translation produces a warning during generation. Losing `format` and similar annotation keywords is expected; `tools/list` is rendered back from Zod.
+- `src/ecad/executor.ts` maps tool arguments: path params are URL-encoded and removed, GET uses query parameters (arrays become `key[]`), writes use a JSON body, `__confirm` gates destructive tools, and `__rawBodyBase64` sends binary bodies. Optional `ownerUuid`/`owner_uuid` values are filled from the current user; the importer records which owner parameters are optional in `ownerParams`, because a required owner must be supplied by the caller. McpServer validates arguments before the handler runs, so the executor has no second validation pass.
 
 ### API client and session
 
-- `src/api/client.ts` is the only generic HTTP layer. It reloads the session **on every request**, so updating the session file needs no server restart.
+- `src/api/client.ts` is the only generic HTTP layer. `apiRequest` supports GET/POST/PUT/PATCH/DELETE, query params (array values become `key[]`), JSON or raw bodies, and JSON/text/binary responses. `apiGet` is the JSON-only GET wrapper used by `src/api/user.ts`.
+- It reloads the session **on every request**, so updating the session file needs no server restart.
 - Requests send a browser-like `User-Agent`, `Referer`, `Origin`, and the cookie header.
-- The backend often returns **HTTP 200 with `{"success":false,"code":401}`**; `apiGet` detects both HTTP 401 and business-code 401 and raises `AuthRequiredError` with login guidance.
+- The backend often returns **HTTP 200 with `{"success":false,"code":401}`**; `apiRequest` detects both HTTP 401 and business-code 401 and raises `AuthRequiredError` with login guidance. The guidance names the current tool as the retry target (`retryTool`).
 - The backend may return raw gzip bytes with `content-type: application/gzip`; the client detects the gzip magic bytes and decompresses.
+- Binary bodies are preserved (`buffer` + `contentType`) so snapshot/chunk tools can return images or embedded resources.
 - `src/session.ts` loads credentials in this priority order:
   1. `JLC_ECAD_COOKIE`
   2. `JLC_ECAD_SESSION_FILE`
@@ -129,7 +143,7 @@ There is no unit-test framework. `scripts/smoke-test.mjs` is the only automated 
 - `JLC_ECAD_TIMEOUT_MS` / `JLC_ECAD_LOGIN_TIMEOUT_MS`
 - `JLC_ECAD_DEBUG=1`
 
-`JLC_ECAD_COOKIE` takes precedence over the session file; login commands warn when it is set.
+`JLC_ECAD_COOKIE` takes precedence over the session file; login commands warn when it is set. `JLC_ECAD_BASE_URL` can point at the JLC ECAD desktop app's local server to use the local `system_*` catalog tools.
 
 ### Build and packaging
 

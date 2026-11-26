@@ -2,7 +2,7 @@
 
 English | [简体中文](./PLAN.md)
 
-> Status: in progress (M2 implemented, pending verification with a real account)
+> Status: in progress (M2 login, M3 logout, and M5 desktop-tool migration implemented)
 > Last updated: 2026-11-25
 
 ## 1. Project Goals
@@ -128,12 +128,22 @@ jlc-ecad-mcp/
 │   │   ├── login.ts            # `jlc-ecad-mcp login` subcommand
 │   │   └── cdp-cookies.ts      # `jlc-ecad-mcp cdp-cookies` subcommand
 │   ├── api/
-│   │   ├── client.ts           # fetch wrapper: cookies, timeout, error mapping
+│   │   ├── client.ts           # fetch wrapper: cookies, timeout, errors, binary responses
 │   │   ├── errors.ts           # ApiError / AuthRequiredError
 │   │   └── user.ts             # GET /api/editor/user
+│   ├── ecad/
+│   │   ├── executor.ts         # generic path/query/body/__confirm executor
+│   │   ├── metadata.ts         # EcadToolDefinition -> McpServer registration config
+│   │   ├── owner.ts            # current-user UUID cache for owner defaults
+│   │   └── types.ts            # EcadToolDefinition (inputSchema is a Zod schema)
 │   └── tools/
-│       ├── auth.ts             # jlc_ecad_login tool
-│       └── user.ts             # jlc_ecad_get_user tool
+│       ├── index.ts            # aggregates the 114 imported tools (generated)
+│       ├── client.ts etc.      # per-domain tool definitions (generated)
+│       ├── user-tools.ts       # user-preference domain (generated, avoids user.ts)
+│       ├── auth.ts             # jlc_ecad_login tool (hand-written)
+│       └── user.ts             # jlc_ecad_get_user tool (hand-written)
+├── scripts/
+│   └── import-ecad-catalog.mjs # regenerate the catalog from the desktop app
 ├── config/esbuild.config.ts    # Bundle to a single-file ESM CLI
 ├── package.json                # bin, files, prepack
 └── README.md / README.en.md
@@ -266,6 +276,19 @@ Each endpoint gets its own tool whose description states whether login is requir
 - [ ] Set up GitHub Actions: build + test + publish on tags (using `NPM_TOKEN`).
 - [ ] Add configuration examples for common MCP clients to the README.
 - [ ] Follow SemVer for versions and Conventional Commits for messages (the repo already enforces this with hooks).
+
+### M5: Migrate the Desktop-App MCP Catalog
+
+- [x] Extracted the full catalog from the JLC ECAD desktop app's `resources/app/server.js` (`var fx` through `var Bx`, 114 tools, covering the requested 25088–27850 range plus the user-preference tools after it); the 10 desktop-local `client_*` tools are excluded, leaving 104 registered.
+- [x] Split by domain under `src/tools/`: system, misc, forms, layers, libraries, macros, parts, plot-frames, projects, symbols, teams, user (`client` is excluded).
+- [x] Kept the original names and argument constraints; tool and property descriptions are translated to English by the generator, using owner/UUID wording without local file or directory details; the generator emits Zod code (`z.looseObject`, `z.string`, `z.array`, ...) from the desktop app's JSON Schema and the SDK's `McpServer.registerTool` registers it; `tools/list` re-renders JSON Schema from Zod, so annotation keywords such as `format` are dropped.
+- [x] Added the generic executor `src/ecad/executor.ts`: path-parameter encoding, GET query strings (arrays as `key[]`), JSON bodies for writes, binary responses, and `__rawBodyBase64`.
+- [x] Destructive tools (53) require explicit user confirmation and `{"__confirm": true}`; no request is sent without it.
+- [x] Optional `ownerUuid`/`owner_uuid` values are filled with the current user's UUID (cached per cookie); the generator records them in `ownerParams`, and required owner parameters are never filled implicitly.
+- [x] McpServer validates `tools/call` arguments with Zod and the executor has no second validation pass; zod is bundled by esbuild, so the package still has zero runtime dependencies.
+- [x] `scripts/import-ecad-catalog.mjs` regenerates the catalog from a newer desktop app.
+- [x] The smoke test covers the 146-tool list, GET query parameters, path encoding, destructive confirmation, the EDA searches, the web-only parts operations, the product catalog, the rights/beta endpoints, the category endpoints, the macro data upload, team management, and the user settings endpoints.
+- Note: some `system_*` tools are implemented by the desktop app's local server; point `JLC_ECAD_BASE_URL` at it to use them. Desktop schemas may differ slightly from the online API; errors include the raw response body.
 
 ## 7. npm Publishing Checklist
 

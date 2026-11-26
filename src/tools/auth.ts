@@ -1,5 +1,6 @@
-import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { z } from 'zod';
+import { apiRequest } from '../api/client.js';
 import { loginViaCdp, trySavedLogin } from '../auth/cdp-login.js';
 import type { LoginResult } from '../auth/login.js';
 import { findChromeBinary } from '../cdp/chrome.js';
@@ -7,83 +8,115 @@ import { DEFAULT_EDITOR_URL } from '../cdp/login-watch.js';
 import { getLoginTimeoutMs } from '../config.js';
 import { logDebug, logError, logInfo } from '../logger.js';
 import { SessionLoadError } from '../session.js';
+import { isRecord } from '../utils.js';
+import { formatRawResponse, formatToolError } from './format.js';
+
+const LOGOUT_PATH = '/api/editor/logout';
 
 let activeLogin: Promise<unknown> | null = null;
 
-export function registerAuthTools(server: McpServer): void {
-  server.registerTool(
-    'jlc_ecad_login',
-    {
-      title: 'Sign in to JLC EDA',
-      description:
-        'In-client fallback for signing in to JLC EDA (jlc-ecad.com). Prefer the CLI when the client can run shell commands: ' +
-        '`npx -y jlc-ecad-mcp login` (or `node dist/index.js login` from the repository). ' +
-        'This tool requires explicit user confirmation: call without confirm first to get a confirmation prompt, ' +
-        'ask the user whether they want to sign in, then call again with {"confirm": true} only after the user agrees. ' +
-        'It tries the current session, saved editor cookies, and saved passport cookies first; if none work, it opens ' +
-        'https://www.jlc-ecad.com/editor in Chrome via CDP and waits for a successful /api/editor/user response. ' +
-        'Call jlc_ecad_get_user again after signing in.',
-      inputSchema: {
-        confirm: z.boolean().optional().describe('Set to true only after the user explicitly confirms they want to sign in.'),
-      },
-      annotations: {
-        readOnlyHint: false,
-        destructiveHint: false,
-        idempotentHint: false,
-        openWorldHint: true,
-      },
-    },
-    async ({ confirm }) => {
-      if (confirm !== true) {
-        return { content: [{ type: 'text', text: confirmationText() }] };
-      }
+export const LOGIN_TOOL = {
+  name: 'jlc_ecad_login',
+  title: 'Sign in to JLC EDA',
+  description:
+    'In-client fallback for signing in to JLC EDA (jlc-ecad.com). Prefer the CLI when the client can run shell commands: ' +
+    '`npx -y jlc-ecad-mcp login` (or `node dist/index.js login` from the repository). ' +
+    'This tool requires explicit user confirmation: call without confirm first to get a confirmation prompt, ' +
+    'ask the user whether they want to sign in, then call again with {"confirm": true} only after the user agrees. ' +
+    'It tries the current session, saved editor cookies, and saved passport cookies first; if none work, it opens ' +
+    'https://www.jlc-ecad.com/editor in Chrome via CDP and waits for a successful /api/editor/user response. ' +
+    'Call jlc_ecad_get_user again after signing in.',
+  inputSchema: z.looseObject({
+    confirm: z.boolean().optional().describe('Set to true only after the user explicitly confirms they want to sign in.'),
+  }),
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: false,
+    idempotentHint: false,
+    openWorldHint: true,
+  },
+};
 
-      try {
-        const saved = await trySavedLogin();
-        if (saved) {
-          return successResponse(saved);
-        }
-      } catch (error) {
-        if (error instanceof SessionLoadError) {
-          logError(`Invalid session file: ${error.message}`);
-        } else {
-          logDebug(`Saved credential check failed: ${error instanceof Error ? error.message : String(error)}`);
-        }
-      }
+export const LOGOUT_TOOL = {
+  name: 'jlc_ecad_logout',
+  title: 'Sign out of JLC EDA',
+  description:
+    'Sign out of JLC EDA (jlc-ecad.com) with GET /api/editor/logout, invalidating the server-side session for the saved cookies. ' +
+    'This does not delete locally saved cookies; run `npx -y jlc-ecad-mcp logout` (or `node dist/index.js logout`) to remove them from disk. ' +
+    'Returns the raw JSON response from the editor backend.',
+  inputSchema: z.looseObject({}),
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: true,
+  },
+};
 
-      if (activeLogin) {
-        return { content: [{ type: 'text', text: inProgressText() }] };
-      }
+export async function handleLogin(args: unknown): Promise<CallToolResult> {
+  const confirm = isRecord(args) && args.confirm === true;
+  if (!confirm) {
+    return { content: [{ type: 'text', text: confirmationText() }] };
+  }
 
-      // Fail fast with a real error instead of claiming a window will open.
-      try {
-        await findChromeBinary();
-      } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        logError(`Cannot start JLC EDA login: ${message}`);
-        return {
-          isError: true,
-          content: [{ type: 'text', text: `Cannot start JLC EDA login: ${message}` }],
-        };
-      }
+  try {
+    const saved = await trySavedLogin();
+    if (saved) {
+      return successResponse(saved);
+    }
+  } catch (error) {
+    if (error instanceof SessionLoadError) {
+      logError(`Invalid session file: ${error.message}`);
+    } else {
+      logDebug(`Saved credential check failed: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
 
-      activeLogin = loginViaCdp({ timeoutMs: getLoginTimeoutMs(), skipFastPath: true })
-        .then((result) => {
-          logInfo(`JLC EDA login successful; session saved to ${result.sessionPath ?? 'the session file'}.`);
-          return result;
-        })
-        .catch((error: unknown) => {
-          logError(`JLC EDA login failed: ${error instanceof Error ? error.message : String(error)}`);
-          throw error;
-        })
-        .finally(() => {
-          activeLogin = null;
-        });
-      void activeLogin.catch(() => undefined);
+  if (activeLogin) {
+    return { content: [{ type: 'text', text: inProgressText() }] };
+  }
 
-      return { content: [{ type: 'text', text: startedText() }] };
-    },
-  );
+  // Fail fast with a real error instead of claiming a window will open.
+  try {
+    await findChromeBinary();
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    logError(`Cannot start JLC EDA login: ${message}`);
+    return {
+      isError: true,
+      content: [{ type: 'text', text: `Cannot start JLC EDA login: ${message}` }],
+    };
+  }
+
+  activeLogin = loginViaCdp({ timeoutMs: getLoginTimeoutMs(), skipFastPath: true })
+    .then((result) => {
+      logInfo(`JLC EDA login successful; session saved to ${result.sessionPath ?? 'the session file'}.`);
+      return result;
+    })
+    .catch((error: unknown) => {
+      logError(`JLC EDA login failed: ${error instanceof Error ? error.message : String(error)}`);
+      throw error;
+    })
+    .finally(() => {
+      activeLogin = null;
+    });
+  void activeLogin.catch(() => undefined);
+
+  return { content: [{ type: 'text', text: startedText() }] };
+}
+
+export async function handleLogout(): Promise<CallToolResult> {
+  try {
+    const response = await apiRequest({ method: 'GET', path: LOGOUT_PATH, retryTool: LOGOUT_TOOL.name });
+    return { content: [{ type: 'text', text: formatRawResponse(response) }] };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    logDebug(`${LOGOUT_TOOL.name} failed: ${message}`);
+    return {
+      isError: true,
+      content: [{ type: 'text', text: formatToolError(error, message) }],
+    };
+  }
 }
 
 function confirmationText(): string {
@@ -102,7 +135,7 @@ function confirmationText(): string {
   ].join('\n');
 }
 
-function successResponse(result: LoginResult): { content: [{ type: 'text'; text: string }] } {
+function successResponse(result: LoginResult): CallToolResult {
   return {
     content: [
       {

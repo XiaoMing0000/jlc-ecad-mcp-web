@@ -7,12 +7,13 @@
  *   2. JLC_ECAD_COOKIE is forwarded,
  *   3. a session file with a "cookies" object is forwarded,
  *   4. a raw gzip response is decoded,
- *   5. the CLI `login` command succeeds with a valid current session (no Chrome),
- *   6. the MCP `jlc_ecad_login` tool does the same,
- *   7. the CLI `login` falls back to the editor cookie snapshot,
- *   8. the CLI `login` falls back to passport cookies + check-login,
- *   9. `login --cookie` saves the session under JLC_ECAD_HOME,
- *  10. `logout` removes current and legacy credential files.
+ *   5. imported ECAD catalog tools handle query/path parameters and destructive confirmation,
+ *   6. the CLI `login` command succeeds with a valid current session (no Chrome),
+ *   7. the MCP `jlc_ecad_login` tool does the same,
+ *   8. the CLI `login` falls back to the editor cookie snapshot,
+ *   9. the CLI `login` falls back to passport cookies + check-login,
+ *  10. `login --cookie` saves the session under JLC_ECAD_HOME,
+ *  11. `logout` removes current and legacy credential files.
  *
  * Run with: pnpm run smoke
  */
@@ -30,56 +31,253 @@ const requests = [];
 const mock = createServer((req, res) => {
   const url = new URL(req.url ?? '/', 'http://127.0.0.1');
   const cookie = req.headers.cookie ?? '';
-  requests.push({ url: req.url, cookie });
+  let body = '';
+  req.setEncoding('utf8');
+  req.on('data', (chunk) => {
+    body += chunk;
+  });
+  req.on('end', () => {
+    requests.push({ method: req.method, url: req.url, cookie, body, headers: req.headers });
 
-  if (url.pathname === '/api/cas/sso/check-login') {
-    res.setHeader('Content-Type', 'application/json');
-    if (cookie.includes('PASSPORT_SESSION=valid')) {
-      res.end(JSON.stringify({ success: true, code: 200, data: { isLogin: true, code: 'AC-test' } }));
-    } else {
-      res.end(JSON.stringify({ success: true, code: 200, data: { isLogin: false } }));
-    }
-    return;
-  }
-
-  if (url.pathname === '/api/editor/login') {
-    if (url.searchParams.get('code') === 'AC-test') {
-      res.statusCode = 302;
-      res.setHeader('Location', '/editor');
-      res.setHeader('Set-Cookie', ['VEN-SESSION=valid; Path=/; HttpOnly', 'VEN-CSRF=from-login; Path=/']);
-      res.end();
-    } else {
-      res.statusCode = 400;
+    if (url.pathname === '/api/cas/sso/check-login') {
       res.setHeader('Content-Type', 'application/json');
-      res.end(JSON.stringify({ success: false, code: 400 }));
+      if (cookie.includes('PASSPORT_SESSION=valid')) {
+        res.end(JSON.stringify({ success: true, code: 200, data: { isLogin: true, code: 'AC-test' } }));
+      } else {
+        res.end(JSON.stringify({ success: true, code: 200, data: { isLogin: false } }));
+      }
+      return;
     }
-    return;
-  }
 
-  if (url.pathname === '/editor') {
-    res.setHeader('Content-Type', 'text/html');
-    res.end('<html>editor</html>');
-    return;
-  }
-
-  if (url.pathname === '/api/editor/user') {
-    if (cookie.includes('VEN-SESSION=gzip')) {
-      // Mimic the backend's occasional raw-gzip response.
-      res.setHeader('Content-Type', 'application/gzip');
-      res.end(gzipSync(JSON.stringify({ success: true, code: 200, result: { uuid: 'user-2', username: 'gzip-demo' } })));
-    } else if (cookie.includes('VEN-SESSION=valid')) {
-      res.setHeader('Content-Type', 'application/json');
-      res.end(JSON.stringify({ success: true, code: 200, result: { uuid: 'user-1', username: 'demo' } }));
-    } else {
-      // The real backend returns HTTP 200 with a business-level 401.
-      res.setHeader('Content-Type', 'application/json');
-      res.end(JSON.stringify({ success: false, code: 401 }));
+    if (url.pathname === '/api/editor/login') {
+      if (url.searchParams.get('code') === 'AC-test') {
+        res.statusCode = 302;
+        res.setHeader('Location', '/editor');
+        res.setHeader('Set-Cookie', ['VEN-SESSION=valid; Path=/; HttpOnly', 'VEN-CSRF=from-login; Path=/']);
+        res.end();
+      } else {
+        res.statusCode = 400;
+        res.setHeader('Content-Type', 'application/json');
+        res.end(JSON.stringify({ success: false, code: 400 }));
+      }
+      return;
     }
-    return;
-  }
 
-  res.statusCode = 404;
-  res.end('{}');
+    if (url.pathname === '/editor') {
+      res.setHeader('Content-Type', 'text/html');
+      res.end('<html>editor</html>');
+      return;
+    }
+
+    if (url.pathname === '/api/editor/teams') {
+      res.setHeader('Content-Type', 'application/json');
+      res.end(JSON.stringify({ success: true, code: 200, result: [{ uuid: 'team-1', name: 'Demo' }] }));
+      return;
+    }
+
+    if (url.pathname === '/api/editor/teams/otherTeams') {
+      res.setHeader('Content-Type', 'application/json');
+      res.end(JSON.stringify({ success: true, code: 200, result: [{ uuid: 'team-2' }] }));
+      return;
+    }
+
+    if (url.pathname === '/api/editor/teams/create') {
+      res.setHeader('Content-Type', 'application/json');
+      res.end(JSON.stringify({ success: true, code: 200, result: { uuid: 'team-new' } }));
+      return;
+    }
+
+    if (url.pathname.startsWith('/api/editor/teams/') && req.method === 'GET') {
+      res.setHeader('Content-Type', 'application/json');
+      res.end(JSON.stringify({ success: true, code: 200, result: { logs: [{ uuid: 'log-1' }] } }));
+      return;
+    }
+
+    if (url.pathname.startsWith('/api/editor/teams/') && req.method === 'POST') {
+      res.setHeader('Content-Type', 'application/json');
+      res.end(JSON.stringify({ success: true, code: 200, result: { ok: true } }));
+      return;
+    }
+
+    if (url.pathname === '/api/editor/eda/components/searchByIds') {
+      res.setHeader('Content-Type', 'application/json');
+      res.end(JSON.stringify({ success: true, code: 200, result: [{ uuid: 'component-1' }] }));
+      return;
+    }
+
+    if (url.pathname === '/api/editor/eda/devices/searchByIds') {
+      res.setHeader('Content-Type', 'application/json');
+      res.end(JSON.stringify({ success: true, code: 200, result: [{ uuid: 'device-1' }] }));
+      return;
+    }
+
+    if (url.pathname.startsWith('/api/editor/macro/') && url.pathname.endsWith('/macroDataUuid')) {
+      res.setHeader('Content-Type', 'application/json');
+      res.end(JSON.stringify({ success: true, code: 200, result: { uploaded: true } }));
+      return;
+    }
+
+    if (url.pathname === '/api/editor/categories' && req.method === 'POST') {
+      res.setHeader('Content-Type', 'application/json');
+      res.end(JSON.stringify({ success: true, code: 200, result: { uuid: 'cat-new' } }));
+      return;
+    }
+
+    if (url.pathname === '/api/editor/categories' && req.method === 'GET') {
+      res.setHeader('Content-Type', 'application/json');
+      res.end(JSON.stringify({ success: true, code: 200, result: [{ uuid: 'cat-1' }] }));
+      return;
+    }
+
+    if (url.pathname.startsWith('/api/editor/categories/')) {
+      res.setHeader('Content-Type', 'application/json');
+      if (url.pathname.endsWith('/delete')) {
+        res.end(JSON.stringify({ success: true, code: 200, result: { deleted: true } }));
+      } else {
+        res.end(JSON.stringify({ success: true, code: 200, result: { updated: true } }));
+      }
+      return;
+    }
+
+    if (url.pathname === '/api/editor/logout') {
+      res.setHeader('Content-Type', 'application/json');
+      res.end(JSON.stringify({ success: true, code: 200, result: { ok: true } }));
+      return;
+    }
+
+    if (url.pathname === '/api/editor/erp/ecad/qrcode') {
+      res.setHeader('Content-Type', 'image/png');
+      res.end(Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64'));
+      return;
+    }
+
+    if (url.pathname === '/api/editor/erp/ecad/member/rights/designer') {
+      res.setHeader('Content-Type', 'application/json');
+      res.end(JSON.stringify({ success: true, code: 200, result: { rights: ['designer'] } }));
+      return;
+    }
+
+    if (url.pathname === '/api/editor/erp/ecad/member/rights') {
+      res.setHeader('Content-Type', 'application/json');
+      res.end(JSON.stringify({ success: true, code: 200, result: { rights: ['member'] } }));
+      return;
+    }
+
+    if (url.pathname === '/api/editor/beta/version') {
+      res.setHeader('Content-Type', 'application/json');
+      res.end(JSON.stringify({ success: true, code: 200, result: { version: '1.0', inWhitelist: true } }));
+      return;
+    }
+
+    if (url.pathname === '/api/editor/beta/whitelist') {
+      res.setHeader('Content-Type', 'application/json');
+      res.end(JSON.stringify({ success: true, code: 200, result: { joined: true } }));
+      return;
+    }
+
+    if (url.pathname === '/api/editor/product/filter') {
+      res.setHeader('Content-Type', 'application/json');
+      res.end(JSON.stringify({ success: true, code: 200, result: { filters: ['resistor'] } }));
+      return;
+    }
+
+    if (url.pathname === '/api/editor/product/list') {
+      res.setHeader('Content-Type', 'application/json');
+      res.end(JSON.stringify({ success: true, code: 200, result: { list: [{ uuid: 'product-1' }] } }));
+      return;
+    }
+
+    if (url.pathname === '/api/editor/product/tree') {
+      res.setHeader('Content-Type', 'application/json');
+      res.end(JSON.stringify({ success: true, code: 200, result: [{ id: 'cat-1' }] }));
+      return;
+    }
+
+    if (url.pathname === '/api/editor/parts/orderBom') {
+      res.setHeader('Content-Type', 'application/json');
+      res.end(JSON.stringify({ success: true, code: 200, result: { orderId: 'bom-1' } }));
+      return;
+    }
+
+    if (url.pathname === '/api/editor/parts/searchPublic') {
+      res.setHeader('Content-Type', 'application/json');
+      res.end(JSON.stringify({ success: true, code: 200, result: [{ uuid: 'public-1' }] }));
+      return;
+    }
+
+    if (url.pathname === '/api/editor/parts/production') {
+      res.setHeader('Content-Type', 'application/json');
+      if (req.method === 'GET') {
+        res.end(JSON.stringify({ success: true, code: 200, result: [{ uuid: 'prod-1' }] }));
+      } else {
+        res.end(JSON.stringify({ success: true, code: 200, result: { ok: true } }));
+      }
+      return;
+    }
+
+    if (url.pathname === '/api/editor/parts' && req.method === 'DELETE') {
+      res.setHeader('Content-Type', 'application/json');
+      res.end(JSON.stringify({ success: true, code: 200, result: {} }));
+      return;
+    }
+
+    if (url.pathname.startsWith('/api/editor/parts/')) {
+      res.setHeader('Content-Type', 'application/json');
+      const uuid = decodeURIComponent(url.pathname.slice('/api/editor/parts/'.length));
+      res.end(JSON.stringify({ success: true, code: 200, result: { uuid } }));
+      return;
+    }
+
+    if (url.pathname === '/api/editor/client/clearLog') {
+      res.setHeader('Content-Type', 'application/json');
+      res.end(JSON.stringify({ success: true, code: 200, result: { cleared: true } }));
+      return;
+    }
+
+    if (url.pathname === '/api/editor/user/agreement') {
+      res.setHeader('Content-Type', 'application/json');
+      res.end(JSON.stringify({ success: true, code: 200, result: { agreed: true } }));
+      return;
+    }
+
+    if (url.pathname === '/api/editor/user/logs') {
+      res.setHeader('Content-Type', 'application/json');
+      res.end(JSON.stringify({ success: true, code: 200, result: { logs: [{ uuid: 'log-1' }] } }));
+      return;
+    }
+
+    if (url.pathname === '/api/editor/user/search') {
+      res.setHeader('Content-Type', 'application/json');
+      res.end(JSON.stringify({ success: true, code: 200, result: [{ uuid: 'user-2' }] }));
+      return;
+    }
+
+    if (url.pathname.startsWith('/api/editor/user/') && req.method === 'GET') {
+      const uuid = decodeURIComponent(url.pathname.slice('/api/editor/user/'.length));
+      res.setHeader('Content-Type', 'application/json');
+      res.end(JSON.stringify({ success: true, code: 200, result: { uuid } }));
+      return;
+    }
+
+    if (url.pathname === '/api/editor/user') {
+      if (cookie.includes('VEN-SESSION=gzip')) {
+        // Mimic the backend's occasional raw-gzip response.
+        res.setHeader('Content-Type', 'application/gzip');
+        res.end(gzipSync(JSON.stringify({ success: true, code: 200, result: { uuid: 'user-2', username: 'gzip-demo' } })));
+      } else if (cookie.includes('VEN-SESSION=valid')) {
+        res.setHeader('Content-Type', 'application/json');
+        res.end(JSON.stringify({ success: true, code: 200, result: { uuid: 'user-1', username: 'demo' } }));
+      } else {
+        // The real backend returns HTTP 200 with a business-level 401.
+        res.setHeader('Content-Type', 'application/json');
+        res.end(JSON.stringify({ success: false, code: 401 }));
+      }
+      return;
+    }
+
+    res.statusCode = 404;
+    res.end('{}');
+  });
 });
 
 await new Promise((resolve) => mock.listen(0, '127.0.0.1', resolve));
@@ -173,7 +371,13 @@ async function callTool(client) {
   client.notify('notifications/initialized', {});
 
   const list = await client.request('tools/list', {});
-  assert.deepEqual(list.result.tools.map((tool) => tool.name).sort(), ['jlc_ecad_get_user', 'jlc_ecad_login'].sort());
+  const listedNames = list.result.tools.map((tool) => tool.name);
+  assert.equal(listedNames.length, 146);
+  assert.equal(new Set(listedNames).size, listedNames.length);
+  assert.ok(listedNames.includes('jlc_ecad_get_user'));
+  assert.ok(listedNames.includes('jlc_ecad_login'));
+  assert.ok(listedNames.includes('part_detail_part'));
+  assert.ok(listedNames.includes('project_update_project'));
 
   const call = await callTool(client);
   assert.equal(call.result.isError, true);
@@ -225,7 +429,43 @@ async function callTool(client) {
   await client.close();
 }
 
-// 5) CLI `login`: valid current session -> success without Chrome.
+// 5) Imported ECAD catalog tools: GET query, path encoding, destructive confirmation.
+{
+  const client = makeClient({ JLC_ECAD_COOKIE: 'VEN-SESSION=valid' });
+  await client.request('initialize', initialize);
+  client.notify('notifications/initialized', {});
+
+  const teams = await client.request('tools/call', { name: 'team_team_list', arguments: { page: '1' } });
+  assert.equal(teams.result.isError, undefined, teams.result.content[0].text);
+  assert.match(teams.result.content[0].text, /team-1/);
+  assert.equal(requests.at(-1).method, 'GET');
+  assert.match(requests.at(-1).url, /\/api\/editor\/teams\?page=1/);
+
+  const part = await client.request('tools/call', { name: 'part_detail_part', arguments: { uuid: 'abc/def' } });
+  assert.equal(part.result.isError, undefined, part.result.content[0].text);
+  assert.match(part.result.content[0].text, /abc\/def/);
+  assert.match(requests.at(-1).url, /\/api\/editor\/parts\/abc%2Fdef/);
+
+  const before = requests.length;
+  const denied = await client.request('tools/call', { name: 'part_delete_parts', arguments: { uuids: ['part-a'] } });
+  assert.equal(denied.result.isError, true);
+  assert.match(denied.result.content[0].text, /destructive/);
+  assert.match(denied.result.content[0].text, /__confirm/);
+  assert.equal(requests.length, before);
+
+  const deleted = await client.request('tools/call', {
+    name: 'part_delete_parts',
+    arguments: { uuids: ['part-a'], __confirm: true },
+  });
+  assert.equal(deleted.result.isError, undefined, deleted.result.content[0].text);
+  assert.equal(requests.at(-1).method, 'DELETE');
+  assert.equal(requests.at(-1).url, '/api/editor/parts');
+  assert.deepEqual(JSON.parse(requests.at(-1).body), { uuids: ['part-a'] });
+
+  await client.close();
+}
+
+// 6) CLI `login`: valid current session -> success without Chrome.
 {
   const cliSessionFile = join(sessionDir, 'cli-session.json');
   writeFileSync(cliSessionFile, JSON.stringify({ version: 1, cookie: 'VEN-SESSION=valid' }), { mode: 0o600 });
@@ -268,7 +508,7 @@ async function callTool(client) {
   }
 }
 
-// 6) MCP `jlc_ecad_login`: valid current session -> no Chrome.
+// 7) MCP `jlc_ecad_login`: valid current session -> no Chrome.
 {
   const toolSessionFile = join(sessionDir, 'tool-session.json');
   writeFileSync(toolSessionFile, JSON.stringify({ version: 1, cookie: 'VEN-SESSION=valid' }), { mode: 0o600 });
@@ -297,7 +537,7 @@ async function callTool(client) {
   await client.close();
 }
 
-// 7) CLI `login`: missing session -> editor cookie snapshot -> session saved.
+// 8) CLI `login`: missing session -> editor cookie snapshot -> session saved.
 {
   const editorFile = join(sessionDir, 'editor-snapshot.json');
   writeFileSync(
@@ -355,7 +595,7 @@ async function callTool(client) {
   assert.equal(saved.user.username, 'demo');
 }
 
-// 8) CLI `login`: no saved session/editor cookies -> passport cookies + check-login.
+// 9) CLI `login`: no saved session/editor cookies -> passport cookies + check-login.
 {
   const passportFile = join(sessionDir, 'passport-snapshot.json');
   writeFileSync(
@@ -420,7 +660,7 @@ async function callTool(client) {
   assert.ok(names.includes('VEN-CSRF'));
 }
 
-// 9) `login --cookie` saves the session under JLC_ECAD_HOME.
+// 10) `login --cookie` saves the session under JLC_ECAD_HOME.
 {
   const configDir = mkdtempSync(join(tmpdir(), 'jlc-ecad-home-'));
   const cli = spawn(process.execPath, ['dist/index.js', 'login', '--cookie', 'VEN-SESSION=valid'], {
@@ -462,7 +702,7 @@ async function callTool(client) {
   }
 }
 
-// 10) `logout` removes current and legacy credential files.
+// 11) `logout` removes current and legacy credential files.
 {
   const projectRoot = process.cwd();
   const logoutDir = mkdtempSync(join(tmpdir(), 'jlc-logout-'));
@@ -518,6 +758,492 @@ async function callTool(client) {
   for (const file of files) {
     assert.equal(existsSync(file), false, `${file} should be removed`);
   }
+}
+
+// 12) Hand-written EDA search tools post their JSON body to the editor API.
+{
+  const client = makeClient({ JLC_ECAD_COOKIE: 'VEN-SESSION=valid' });
+  await client.request('initialize', initialize);
+  client.notify('notifications/initialized', {});
+
+  const components = await client.request('tools/call', {
+    name: 'jlc_ecad_search_components',
+    arguments: { path: '/demo', uuids: ['c1', 'c2'] },
+  });
+  assert.equal(components.result.isError, undefined, components.result.content[0].text);
+  assert.match(components.result.content[0].text, /component-1/);
+  assert.equal(requests.at(-1).method, 'POST');
+  assert.equal(requests.at(-1).url, '/api/editor/eda/components/searchByIds');
+  assert.deepEqual(JSON.parse(requests.at(-1).body), { path: '/demo', uuids: ['c1', 'c2'] });
+
+  const devices = await client.request('tools/call', {
+    name: 'jlc_ecad_search_devices',
+    arguments: { uuids: ['d1'] },
+  });
+  assert.equal(devices.result.isError, undefined, devices.result.content[0].text);
+  assert.match(devices.result.content[0].text, /device-1/);
+  assert.equal(requests.at(-1).method, 'POST');
+  assert.equal(requests.at(-1).url, '/api/editor/eda/devices/searchByIds');
+  assert.deepEqual(JSON.parse(requests.at(-1).body), { uuids: ['d1'] });
+
+  await client.close();
+}
+
+// 13) Web-only parts tools: BOM order, production tabs, and public search.
+{
+  const client = makeClient({ JLC_ECAD_COOKIE: 'VEN-SESSION=valid' });
+  await client.request('initialize', initialize);
+  client.notify('notifications/initialized', {});
+
+  const beforeOrder = requests.length;
+  const deniedOrder = await client.request('tools/call', {
+    name: 'jlc_ecad_order_part_bom',
+    arguments: { list: [{ partUuid: 'p1', count: 2 }], bom_name: 'BOM-A', customer_code: 'C-1' },
+  });
+  assert.equal(deniedOrder.result.isError, true);
+  assert.match(deniedOrder.result.content[0].text, /destructive/);
+  assert.match(deniedOrder.result.content[0].text, /__confirm/);
+  assert.equal(requests.length, beforeOrder);
+
+  const ordered = await client.request('tools/call', {
+    name: 'jlc_ecad_order_part_bom',
+    arguments: { list: [{ partUuid: 'p1', count: 2 }], bom_name: 'BOM-A', customer_code: 'C-1', __confirm: true },
+  });
+  assert.equal(ordered.result.isError, undefined, ordered.result.content[0].text);
+  assert.match(ordered.result.content[0].text, /bom-1/);
+  assert.equal(requests.at(-1).method, 'POST');
+  assert.equal(requests.at(-1).url, '/api/editor/parts/orderBom');
+  assert.deepEqual(JSON.parse(requests.at(-1).body), {
+    list: [{ partUuid: 'p1', count: 2 }],
+    bom_name: 'BOM-A',
+    customer_code: 'C-1',
+  });
+
+  const added = await client.request('tools/call', {
+    name: 'jlc_ecad_add_part_production',
+    arguments: { partUuid: 'p1', data: [{ drillUuid: 'd1', name: 'top', offsetX: 1, offsetY: 2, sort: 0 }] },
+  });
+  assert.equal(added.result.isError, undefined, added.result.content[0].text);
+  assert.equal(requests.at(-1).method, 'POST');
+  assert.equal(requests.at(-1).url, '/api/editor/parts/production');
+  assert.deepEqual(JSON.parse(requests.at(-1).body), {
+    partUuid: 'p1',
+    data: [{ drillUuid: 'd1', name: 'top', offsetX: 1, offsetY: 2, sort: 0 }],
+  });
+
+  const updated = await client.request('tools/call', {
+    name: 'jlc_ecad_update_part_production',
+    arguments: { partUuid: 'p1', data: [{ uuid: 't1', offsetX: 3 }] },
+  });
+  assert.equal(updated.result.isError, undefined, updated.result.content[0].text);
+  assert.equal(requests.at(-1).method, 'POST');
+  assert.equal(requests.at(-1).url, '/api/editor/parts/production');
+  assert.deepEqual(JSON.parse(requests.at(-1).body), { partUuid: 'p1', data: [{ uuid: 't1', offsetX: 3 }] });
+
+  const beforeDelete = requests.length;
+  const deniedDelete = await client.request('tools/call', {
+    name: 'jlc_ecad_delete_part_production',
+    arguments: { partUuid: 'p1', uuids: ['t1'] },
+  });
+  assert.equal(deniedDelete.result.isError, true);
+  assert.match(deniedDelete.result.content[0].text, /__confirm/);
+  assert.equal(requests.length, beforeDelete);
+
+  const deleted = await client.request('tools/call', {
+    name: 'jlc_ecad_delete_part_production',
+    arguments: { partUuid: 'p1', uuids: ['t1'], __confirm: true },
+  });
+  assert.equal(deleted.result.isError, undefined, deleted.result.content[0].text);
+  assert.equal(requests.at(-1).method, 'DELETE');
+  assert.equal(requests.at(-1).url, '/api/editor/parts/production');
+  assert.deepEqual(JSON.parse(requests.at(-1).body), { partUuid: 'p1', uuids: ['t1'] });
+
+  const listed = await client.request('tools/call', {
+    name: 'jlc_ecad_get_part_production',
+    arguments: { partUuid: 'p1' },
+  });
+  assert.equal(listed.result.isError, undefined, listed.result.content[0].text);
+  assert.match(listed.result.content[0].text, /prod-1/);
+  assert.equal(requests.at(-1).method, 'GET');
+  assert.equal(requests.at(-1).url, '/api/editor/parts/production?partUuid=p1');
+
+  const search = await client.request('tools/call', {
+    name: 'jlc_ecad_search_public_parts',
+    arguments: { keyword: 'res', type: 1, page: 2, pageSize: 20 },
+  });
+  assert.equal(search.result.isError, undefined, search.result.content[0].text);
+  assert.match(search.result.content[0].text, /public-1/);
+  assert.equal(requests.at(-1).method, 'GET');
+  assert.equal(requests.at(-1).url, '/api/editor/parts/searchPublic?keyword=res&type=1&page=2&pageSize=20');
+
+  await client.close();
+}
+
+// 14) Web-only product catalog tools: filters, list (GET/POST), and tree.
+{
+  const client = makeClient({ JLC_ECAD_COOKIE: 'VEN-SESSION=valid' });
+  await client.request('initialize', initialize);
+  client.notify('notifications/initialized', {});
+
+  const query = {
+    pageNum: 1,
+    pageSize: 20,
+    catalog: 'res',
+    param: '{}',
+    keyword: '10k',
+    piceSort: 'asc',
+    stockSort: 'desc',
+  };
+
+  const filters = await client.request('tools/call', {
+    name: 'jlc_ecad_get_product_filters',
+    arguments: query,
+  });
+  assert.equal(filters.result.isError, undefined, filters.result.content[0].text);
+  assert.match(filters.result.content[0].text, /resistor/);
+  assert.equal(requests.at(-1).method, 'GET');
+  assert.equal(
+    requests.at(-1).url,
+    '/api/editor/product/filter?pageNum=1&pageSize=20&catalog=res&param=%7B%7D&keyword=10k&piceSort=asc&stockSort=desc',
+  );
+
+  const listed = await client.request('tools/call', { name: 'jlc_ecad_list_products', arguments: query });
+  assert.equal(listed.result.isError, undefined, listed.result.content[0].text);
+  assert.match(listed.result.content[0].text, /product-1/);
+  assert.equal(requests.at(-1).method, 'GET');
+  assert.match(requests.at(-1).url, /^\/api\/editor\/product\/list\?pageNum=1&/);
+
+  const posted = await client.request('tools/call', { name: 'jlc_ecad_list_products_post', arguments: query });
+  assert.equal(posted.result.isError, undefined, posted.result.content[0].text);
+  assert.equal(requests.at(-1).method, 'POST');
+  assert.equal(requests.at(-1).url, '/api/editor/product/list');
+  assert.deepEqual(JSON.parse(requests.at(-1).body), query);
+
+  const tree = await client.request('tools/call', { name: 'jlc_ecad_get_product_tree', arguments: {} });
+  assert.equal(tree.result.isError, undefined, tree.result.content[0].text);
+  assert.match(tree.result.content[0].text, /cat-1/);
+  assert.equal(requests.at(-1).method, 'GET');
+  assert.equal(requests.at(-1).url, '/api/editor/product/tree');
+
+  await client.close();
+}
+
+// 15) Web-only logout, ERP rights, and beta program tools.
+{
+  const client = makeClient({ JLC_ECAD_COOKIE: 'VEN-SESSION=valid' });
+  await client.request('initialize', initialize);
+  client.notify('notifications/initialized', {});
+
+  const logout = await client.request('tools/call', { name: 'jlc_ecad_logout', arguments: {} });
+  assert.equal(logout.result.isError, undefined, logout.result.content[0].text);
+  assert.match(logout.result.content[0].text, /"ok": true/);
+  assert.equal(requests.at(-1).method, 'GET');
+  assert.equal(requests.at(-1).url, '/api/editor/logout');
+
+  const qrcode = await client.request('tools/call', {
+    name: 'jlc_ecad_get_official_account_qrcode',
+    arguments: {},
+  });
+  assert.equal(qrcode.result.isError, undefined);
+  assert.equal(qrcode.result.content[0].type, 'image');
+  assert.equal(qrcode.result.content[0].mimeType, 'image/png');
+  assert.ok(qrcode.result.content[0].data.length > 0);
+  assert.equal(requests.at(-1).url, '/api/editor/erp/ecad/qrcode');
+
+  const designer = await client.request('tools/call', {
+    name: 'jlc_ecad_get_designer_rights',
+    arguments: {},
+  });
+  assert.equal(designer.result.isError, undefined, designer.result.content[0].text);
+  assert.match(designer.result.content[0].text, /designer/);
+  assert.equal(requests.at(-1).url, '/api/editor/erp/ecad/member/rights/designer');
+
+  const member = await client.request('tools/call', { name: 'jlc_ecad_get_member_rights', arguments: {} });
+  assert.equal(member.result.isError, undefined, member.result.content[0].text);
+  assert.match(member.result.content[0].text, /member/);
+  assert.equal(requests.at(-1).url, '/api/editor/erp/ecad/member/rights');
+
+  const beta = await client.request('tools/call', { name: 'jlc_ecad_get_beta_status', arguments: {} });
+  assert.equal(beta.result.isError, undefined, beta.result.content[0].text);
+  assert.match(beta.result.content[0].text, /inWhitelist/);
+  assert.equal(requests.at(-1).method, 'GET');
+  assert.equal(requests.at(-1).url, '/api/editor/beta/version');
+
+  const joined = await client.request('tools/call', { name: 'jlc_ecad_join_beta_whitelist', arguments: {} });
+  assert.equal(joined.result.isError, undefined, joined.result.content[0].text);
+  assert.match(joined.result.content[0].text, /joined/);
+  assert.equal(requests.at(-1).method, 'POST');
+  assert.equal(requests.at(-1).url, '/api/editor/beta/whitelist');
+  assert.equal(requests.at(-1).body, '{}');
+
+  await client.close();
+}
+
+// 16) Category tools: create, list, update, and confirmed delete.
+{
+  const client = makeClient({ JLC_ECAD_COOKIE: 'VEN-SESSION=valid' });
+  await client.request('initialize', initialize);
+  client.notify('notifications/initialized', {});
+
+  const created = await client.request('tools/call', {
+    name: 'jlc_ecad_create_category',
+    arguments: { name: 'Resistors', type: 6, user_uuid: 'u1', order_no: 1 },
+  });
+  assert.equal(created.result.isError, undefined, created.result.content[0].text);
+  assert.match(created.result.content[0].text, /cat-new/);
+  assert.equal(requests.at(-1).method, 'POST');
+  assert.equal(requests.at(-1).url, '/api/editor/categories');
+  assert.deepEqual(JSON.parse(requests.at(-1).body), {
+    name: 'Resistors',
+    type: 6,
+    user_uuid: 'u1',
+    order_no: 1,
+  });
+
+  const listed = await client.request('tools/call', {
+    name: 'jlc_ecad_list_categories',
+    arguments: { user_uuid: 'u1', type: 6 },
+  });
+  assert.equal(listed.result.isError, undefined, listed.result.content[0].text);
+  assert.match(listed.result.content[0].text, /cat-1/);
+  assert.equal(requests.at(-1).method, 'GET');
+  assert.equal(requests.at(-1).url, '/api/editor/categories?user_uuid=u1&type=6');
+
+  const updated = await client.request('tools/call', {
+    name: 'jlc_ecad_update_category',
+    arguments: { uuid: 'cat-1', name: 'Resistors 0805', order_no: 2 },
+  });
+  assert.equal(updated.result.isError, undefined, updated.result.content[0].text);
+  assert.match(updated.result.content[0].text, /updated/);
+  assert.equal(requests.at(-1).method, 'POST');
+  assert.equal(requests.at(-1).url, '/api/editor/categories/cat-1');
+  assert.deepEqual(JSON.parse(requests.at(-1).body), { name: 'Resistors 0805', order_no: 2 });
+
+  const beforeDelete = requests.length;
+  const denied = await client.request('tools/call', {
+    name: 'jlc_ecad_delete_category',
+    arguments: { uuid: 'cat-1' },
+  });
+  assert.equal(denied.result.isError, true);
+  assert.match(denied.result.content[0].text, /destructive/);
+  assert.match(denied.result.content[0].text, /__confirm/);
+  assert.equal(requests.length, beforeDelete);
+
+  const deleted = await client.request('tools/call', {
+    name: 'jlc_ecad_delete_category',
+    arguments: { uuid: 'cat/1', __confirm: true },
+  });
+  assert.equal(deleted.result.isError, undefined, deleted.result.content[0].text);
+  assert.equal(requests.at(-1).method, 'POST');
+  assert.equal(requests.at(-1).url, '/api/editor/categories/cat%2F1/delete');
+  assert.equal(requests.at(-1).body, '{}');
+
+  await client.close();
+}
+
+// 17) Web-only macro data upload: raw body with the stream content type.
+{
+  const client = makeClient({ JLC_ECAD_COOKIE: 'VEN-SESSION=valid' });
+  await client.request('initialize', initialize);
+  client.notify('notifications/initialized', {});
+
+  const uploaded = await client.request('tools/call', {
+    name: 'jlc_ecad_upload_macro_data',
+    arguments: { uuid: 'm/1', dataBase64: Buffer.from('macro-data').toString('base64') },
+  });
+  assert.equal(uploaded.result.isError, undefined, uploaded.result.content[0].text);
+  assert.match(uploaded.result.content[0].text, /uploaded/);
+  assert.equal(requests.at(-1).method, 'PUT');
+  assert.equal(requests.at(-1).url, '/api/editor/macro/m%2F1/macroDataUuid');
+  assert.equal(requests.at(-1).body, 'macro-data');
+  assert.equal(requests.at(-1).headers['content-type'], 'stream');
+
+  await client.close();
+}
+
+// 18) Web-only team management tools.
+{
+  const client = makeClient({ JLC_ECAD_COOKIE: 'VEN-SESSION=valid' });
+  await client.request('initialize', initialize);
+  client.notify('notifications/initialized', {});
+
+  const list = await client.request('tools/call', {
+    name: 'jlc_ecad_list_teams',
+    arguments: { page: 1, pageSize: 10, type: 'all', form: 'all' },
+  });
+  assert.equal(list.result.isError, undefined, list.result.content[0].text);
+  assert.match(list.result.content[0].text, /team-1/);
+  assert.equal(requests.at(-1).method, 'GET');
+  assert.equal(requests.at(-1).url, '/api/editor/teams?page=1&pageSize=10&type=all&form=all');
+
+  const other = await client.request('tools/call', { name: 'jlc_ecad_get_other_teams', arguments: {} });
+  assert.equal(other.result.isError, undefined, other.result.content[0].text);
+  assert.equal(requests.at(-1).url, '/api/editor/teams/otherTeams');
+
+  const created = await client.request('tools/call', {
+    name: 'jlc_ecad_create_team',
+    arguments: { username: 'team-a', members: ['u1', 'u2'] },
+  });
+  assert.equal(created.result.isError, undefined, created.result.content[0].text);
+  assert.equal(requests.at(-1).method, 'POST');
+  assert.equal(requests.at(-1).url, '/api/editor/teams/create');
+  assert.deepEqual(JSON.parse(requests.at(-1).body), { username: 'team-a', members: ['u1', 'u2'] });
+
+  const added = await client.request('tools/call', {
+    name: 'jlc_ecad_add_team_member',
+    arguments: { teamUuid: 't/1', memberUuid: 'm1' },
+  });
+  assert.equal(added.result.isError, undefined, added.result.content[0].text);
+  assert.equal(requests.at(-1).url, '/api/editor/teams/t%2F1/members/add');
+  assert.deepEqual(JSON.parse(requests.at(-1).body), { uuid: 'm1' });
+
+  const role = await client.request('tools/call', {
+    name: 'jlc_ecad_update_team_member_role',
+    arguments: { teamUuid: 't1', memberUuid: 'm1', role: 'admin' },
+  });
+  assert.equal(role.result.isError, undefined, role.result.content[0].text);
+  assert.equal(requests.at(-1).url, '/api/editor/teams/t1/members/m1/update');
+  assert.deepEqual(JSON.parse(requests.at(-1).body), { role: 'admin' });
+
+  const remark = await client.request('tools/call', {
+    name: 'jlc_ecad_update_team_member_remark',
+    arguments: { teamUuid: 't1', memberUuid: 'm1', remark: 'lead' },
+  });
+  assert.equal(remark.result.isError, undefined, remark.result.content[0].text);
+  assert.equal(requests.at(-1).url, '/api/editor/teams/t1/updateRemark');
+  assert.deepEqual(JSON.parse(requests.at(-1).body), { uuid: 'm1', remark: 'lead' });
+
+  const info = await client.request('tools/call', {
+    name: 'jlc_ecad_get_team_info',
+    arguments: { teamUuid: 't1' },
+  });
+  assert.equal(info.result.isError, undefined, info.result.content[0].text);
+  assert.equal(requests.at(-1).method, 'POST');
+  assert.equal(requests.at(-1).url, '/api/editor/teams/t1/teamInfo');
+  assert.equal(requests.at(-1).body, '{}');
+
+  const updated = await client.request('tools/call', {
+    name: 'jlc_ecad_update_team',
+    arguments: { teamUuid: 't1', nickname: 'New', introduction: 'hi' },
+  });
+  assert.equal(updated.result.isError, undefined, updated.result.content[0].text);
+  assert.equal(requests.at(-1).url, '/api/editor/teams/t1/update');
+  assert.deepEqual(JSON.parse(requests.at(-1).body), { nickname: 'New', introduction: 'hi' });
+
+  const logs = await client.request('tools/call', {
+    name: 'jlc_ecad_get_team_logs',
+    arguments: { teamUuid: 't1', search: 'x', startTime: 1, endTime: 2, sort: 'desc' },
+  });
+  assert.equal(logs.result.isError, undefined, logs.result.content[0].text);
+  assert.match(logs.result.content[0].text, /log-1/);
+  assert.equal(requests.at(-1).method, 'GET');
+  assert.equal(requests.at(-1).url, '/api/editor/teams/t1/logs?search=x&startTime=1&endTime=2&sort=desc');
+
+  const beforeRemove = requests.length;
+  const deniedRemove = await client.request('tools/call', {
+    name: 'jlc_ecad_remove_team_member',
+    arguments: { teamUuid: 't1', memberUuid: 'm1', remove_project_member: 'false' },
+  });
+  assert.equal(deniedRemove.result.isError, true);
+  assert.match(deniedRemove.result.content[0].text, /__confirm/);
+  assert.equal(requests.length, beforeRemove);
+
+  const removed = await client.request('tools/call', {
+    name: 'jlc_ecad_remove_team_member',
+    arguments: { teamUuid: 't1', memberUuid: 'm1', remove_project_member: 'false', __confirm: true },
+  });
+  assert.equal(removed.result.isError, undefined, removed.result.content[0].text);
+  assert.equal(requests.at(-1).url, '/api/editor/teams/t1/members/remove');
+  assert.deepEqual(JSON.parse(requests.at(-1).body), { uuid: 'm1', remove_project_member: 'false' });
+
+  const beforeTransfer = requests.length;
+  const deniedTransfer = await client.request('tools/call', {
+    name: 'jlc_ecad_transfer_team',
+    arguments: { teamUuid: 't1', newOwnerUuid: 'u2' },
+  });
+  assert.equal(deniedTransfer.result.isError, true);
+  assert.equal(requests.length, beforeTransfer);
+
+  const transferred = await client.request('tools/call', {
+    name: 'jlc_ecad_transfer_team',
+    arguments: { teamUuid: 't1', newOwnerUuid: 'u2', __confirm: true },
+  });
+  assert.equal(transferred.result.isError, undefined, transferred.result.content[0].text);
+  assert.equal(requests.at(-1).url, '/api/editor/teams/t1/transfer');
+  assert.deepEqual(JSON.parse(requests.at(-1).body), { uuid: 'u2' });
+
+  const beforeDelete = requests.length;
+  const deniedDelete = await client.request('tools/call', {
+    name: 'jlc_ecad_delete_team',
+    arguments: { teamUuid: 't1' },
+  });
+  assert.equal(deniedDelete.result.isError, true);
+  assert.equal(requests.length, beforeDelete);
+
+  const deleted = await client.request('tools/call', {
+    name: 'jlc_ecad_delete_team',
+    arguments: { teamUuid: 't1', __confirm: true },
+  });
+  assert.equal(deleted.result.isError, undefined, deleted.result.content[0].text);
+  assert.equal(requests.at(-1).url, '/api/editor/teams/t1/delete');
+  assert.equal(requests.at(-1).body, '{}');
+
+  await client.close();
+}
+
+// 19) Web-only user profile, agreement, logs, and search tools.
+{
+  const client = makeClient({ JLC_ECAD_COOKIE: 'VEN-SESSION=valid' });
+  await client.request('initialize', initialize);
+  client.notify('notifications/initialized', {});
+
+  const agreement = await client.request('tools/call', {
+    name: 'jlc_ecad_accept_user_agreement',
+    arguments: {},
+  });
+  assert.equal(agreement.result.isError, undefined, agreement.result.content[0].text);
+  assert.match(agreement.result.content[0].text, /agreed/);
+  assert.equal(requests.at(-1).method, 'POST');
+  assert.equal(requests.at(-1).url, '/api/editor/user/agreement');
+  assert.equal(requests.at(-1).body, '{}');
+
+  const logs = await client.request('tools/call', {
+    name: 'jlc_ecad_get_user_logs',
+    arguments: { page: 1, pageSize: 10, sort: 'desc' },
+  });
+  assert.equal(logs.result.isError, undefined, logs.result.content[0].text);
+  assert.match(logs.result.content[0].text, /log-1/);
+  assert.equal(requests.at(-1).method, 'GET');
+  assert.equal(requests.at(-1).url, '/api/editor/user/logs?page=1&pageSize=10&sort=desc');
+
+  const search = await client.request('tools/call', {
+    name: 'jlc_ecad_search_users',
+    arguments: { q: 42, limit: 5 },
+  });
+  assert.equal(search.result.isError, undefined, search.result.content[0].text);
+  assert.match(search.result.content[0].text, /user-2/);
+  assert.equal(requests.at(-1).method, 'GET');
+  assert.equal(requests.at(-1).url, '/api/editor/user/search?q=42&limit=5');
+
+  const updated = await client.request('tools/call', {
+    name: 'jlc_ecad_update_user',
+    arguments: { nickname: 'Demo', avatar: 'avatar.png' },
+  });
+  assert.equal(updated.result.isError, undefined, updated.result.content[0].text);
+  assert.equal(requests.at(-1).method, 'POST');
+  assert.equal(requests.at(-1).url, '/api/editor/user');
+  assert.deepEqual(JSON.parse(requests.at(-1).body), { nickname: 'Demo', avatar: 'avatar.png' });
+
+  const byUuid = await client.request('tools/call', {
+    name: 'jlc_ecad_get_user_by_uuid',
+    arguments: { uuid: 'u/2' },
+  });
+  assert.equal(byUuid.result.isError, undefined, byUuid.result.content[0].text);
+  assert.match(byUuid.result.content[0].text, /u\/2/);
+  assert.equal(requests.at(-1).method, 'GET');
+  assert.equal(requests.at(-1).url, '/api/editor/user/u%2F2');
+
+  await client.close();
 }
 
 mock.close();

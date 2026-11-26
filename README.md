@@ -138,10 +138,83 @@ editor-cookies.json
 
 ## 提供的工具
 
-| 工具                | 说明                                                          |
-| ------------------- | ------------------------------------------------------------- |
-| `jlc_ecad_login`    | CLI 无法运行时的兜底；需用户确认后以 `{"confirm": true}` 调用 |
-| `jlc_ecad_get_user` | 调用 `GET /api/editor/user`，返回当前登录用户的原始 JSON 响应 |
+MCP 服务注册了 **146** 个工具：42 个手写工具（登录/用户 3 个 + 用户设置 5 个 + EDA 检索 2 个 + 部件 Web 操作 6 个 + 产品目录 4 个 + 权益 3 个 + 公测 2 个 + 分类 4 个 + 宏上传 1 个 + 团队管理 12 个），以及从 JLC ECAD 桌面端 `resources/app/server.js` 迁移的 **104** 个 ECAD 工具（`client_*` 仅由桌面端本地服务实现，未注册）。
+
+| 工具                                   | 说明                                                                                                 |
+| -------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| `jlc_ecad_login`                       | CLI 无法运行时的兜底；需用户确认后以 `{"confirm": true}` 调用                                        |
+| `jlc_ecad_logout`                      | 调用 `GET /api/editor/logout` 注销服务端会话（不删除本地 Cookie 文件）                               |
+| `jlc_ecad_get_user`                    | 调用 `GET /api/editor/user`，返回当前登录用户的原始 JSON 响应                                        |
+| `jlc_ecad_accept_user_agreement`       | 调用 `POST /api/editor/user/agreement` 统一隐私协议                                                  |
+| `jlc_ecad_get_user_logs`               | 调用 `GET /api/editor/user/logs` 获取用户操作日志                                                    |
+| `jlc_ecad_search_users`                | 调用 `GET /api/editor/user/search` 按 `q`/`limit` 搜索用户                                           |
+| `jlc_ecad_update_user`                 | 调用 `POST /api/editor/user` 修改昵称和头像                                                          |
+| `jlc_ecad_get_user_by_uuid`            | 调用 `GET /api/editor/user/:uuid` 获取指定用户信息                                                   |
+| `jlc_ecad_search_components`           | 调用 `POST /api/editor/eda/components/searchByIds` 按 UUID 查询 components                           |
+| `jlc_ecad_search_devices`              | 调用 `POST /api/editor/eda/devices/searchByIds` 按 UUID 查询器件                                     |
+| `jlc_ecad_order_part_bom`              | 调用 `POST /api/editor/parts/orderBom` 提交 BOM 下单；需 `{"__confirm": true}`                       |
+| `jlc_ecad_add_part_production`         | 调用 `POST /api/editor/parts/production` 添加生产选项卡                                              |
+| `jlc_ecad_update_part_production`      | 调用 `POST /api/editor/parts/production` 更新生产选项卡                                              |
+| `jlc_ecad_delete_part_production`      | 调用 `DELETE /api/editor/parts/production` 删除生产选项卡；需 `{"__confirm": true}`                  |
+| `jlc_ecad_get_part_production`         | 调用 `GET /api/editor/parts/production` 获取生产选项卡                                               |
+| `jlc_ecad_search_public_parts`         | 调用 `GET /api/editor/parts/searchPublic` 搜索公共部件                                               |
+| `jlc_ecad_get_product_filters`         | 调用 `GET /api/editor/product/filter` 获取产品筛选项                                                 |
+| `jlc_ecad_list_products`               | 调用 `GET /api/editor/product/list` 获取产品列表                                                     |
+| `jlc_ecad_list_products_post`          | 调用 `POST /api/editor/product/list` 获取产品列表（字段放在 JSON body）                              |
+| `jlc_ecad_get_product_tree`            | 调用 `GET /api/editor/product/tree` 获取产品树分类                                                   |
+| `jlc_ecad_get_official_account_qrcode` | 调用 `GET /api/editor/erp/ecad/qrcode` 获取公众号二维码（后端返回图片时直接返回图片）                |
+| `jlc_ecad_get_designer_rights`         | 调用 `GET /api/editor/erp/ecad/member/rights/designer` 查询客户设计师权益                            |
+| `jlc_ecad_get_member_rights`           | 调用 `GET /api/editor/erp/ecad/member/rights` 查询客户当前领取的权益                                 |
+| `jlc_ecad_get_beta_status`             | 调用 `GET /api/editor/beta/version` 获取公测信息并校验是否在内测名单                                 |
+| `jlc_ecad_join_beta_whitelist`         | 调用 `POST /api/editor/beta/whitelist` 将当前用户加入公测名单                                        |
+| `jlc_ecad_create_category`             | 调用 `POST /api/editor/categories` 创建分类                                                          |
+| `jlc_ecad_list_categories`             | 调用 `GET /api/editor/categories` 获取分类数据                                                       |
+| `jlc_ecad_update_category`             | 调用 `POST /api/editor/categories/:uuid` 更新分类                                                    |
+| `jlc_ecad_delete_category`             | 调用 `POST /api/editor/categories/:uuid/delete` 删除分类；需 `{"__confirm": true}`                   |
+| `jlc_ecad_upload_macro_data`           | 调用 `PUT /api/editor/macro/:uuid/macroDataUuid` 上传宏数据（原始字节，默认 `Content-Type: stream`） |
+| `jlc_ecad_add_team_member`             | 调用 `POST /api/editor/teams/:uuid/members/add` 添加团队成员                                         |
+| `jlc_ecad_create_team`                 | 调用 `POST /api/editor/teams/create` 创建团队                                                        |
+| `jlc_ecad_delete_team`                 | 调用 `POST /api/editor/teams/:uuid/delete` 删除团队；需 `{"__confirm": true}`                        |
+| `jlc_ecad_list_teams`                  | 调用 `GET /api/editor/teams` 获取团队列表                                                            |
+| `jlc_ecad_get_team_logs`               | 调用 `GET /api/editor/teams/:uuid/logs` 获取团队操作日志                                             |
+| `jlc_ecad_get_other_teams`             | 调用 `GET /api/editor/teams/otherTeams` 获取相关团队                                                 |
+| `jlc_ecad_remove_team_member`          | 调用 `POST /api/editor/teams/:uuid/members/remove` 移除团队成员；需 `{"__confirm": true}`            |
+| `jlc_ecad_get_team_info`               | 调用 `POST /api/editor/teams/:uuid/teamInfo` 获取团队详情                                            |
+| `jlc_ecad_transfer_team`               | 调用 `POST /api/editor/teams/:uuid/transfer` 转移团队；需 `{"__confirm": true}`                      |
+| `jlc_ecad_update_team`                 | 调用 `POST /api/editor/teams/:uuid/update` 更新团队信息                                              |
+| `jlc_ecad_update_team_member_role`     | 调用 `POST /api/editor/teams/:uuid/members/:memberUuid/update` 修改成员角色                          |
+| `jlc_ecad_update_team_member_remark`   | 调用 `POST /api/editor/teams/:uuid/updateRemark` 修改成员备注                                        |
+
+### 迁移的 ECAD 工具
+
+迁移工具保留桌面端名称和参数约束；工具描述与参数描述由生成器翻译为英文（使用归属/UUID 语义，去掉本地文件/目录细节），`inputSchema` 直接写成 Zod（`z.looseObject`/`z.string`/`z.array` 等），按业务域拆分在 `src/tools/`；`tools/list` 由 Zod 重新生成 JSON Schema（`format` 等注解字段不保留）：
+
+| 分类     | 工具数  | 文件             |
+| -------- | ------- | ---------------- |
+| 系统     | 4       | `system.ts`      |
+| 其他     | 2       | `misc.ts`        |
+| 表单     | 11      | `forms.ts`       |
+| 层       | 6       | `layers.ts`      |
+| 库       | 5       | `libraries.ts`   |
+| 宏       | 8       | `macros.ts`      |
+| 部件     | 24      | `parts.ts`       |
+| 图框     | 9       | `plot-frames.ts` |
+| 工程     | 16      | `projects.ts`    |
+| 符号     | 9       | `symbols.ts`     |
+| 团队     | 2       | `teams.ts`       |
+| 用户偏好 | 8       | `user-tools.ts`  |
+| **合计** | **104** |                  |
+
+使用说明：
+
+- **破坏性工具**（53 个）必须由用户确认后，以 `{"__confirm": true}` 调用；未确认时不会发出请求。
+- `GET` 工具把参数放在 query string 中，数组参数按编辑器前端的约定序列化为 `key[]=...`；`POST`/`PUT`/`PATCH`/`DELETE` 默认发送 JSON body。
+- 路径参数（如 `:uuid`、`:projectUuid`）会自动 `encodeURIComponent` 后填入 URL。
+- 若工具 schema 中 `ownerUuid`/`owner_uuid` 为可选参数，调用时会自动填入当前登录用户的 UUID。
+- 部分 `system_*` 工具由 JLC ECAD 桌面端本地服务实现；如需使用这些工具，可将 `JLC_ECAD_BASE_URL` 指向桌面端本地服务。
+- 桌面端 schema 与线上接口可能存在细节差异；接口错误会原样返回响应体，便于排查。
+- 需要二进制请求体时，可传 `__rawBodyBase64`（base64 字符串）和可选的 `__contentType`；用于分片上传等接口。
+- 桌面端升级后重新生成目录：`pnpm run import:ecad /path/to/resources/app/server.js`，然后运行 `pnpm run fmt`。
 
 ## 配置项
 
@@ -150,7 +223,7 @@ editor-cookies.json
 | `JLC_ECAD_HOME`                  | 否   | `~/Documents/JLC-ECAD/jlc-ecad-mcp-web` | 覆盖整个配置目录                      |
 | `JLC_ECAD_COOKIE`                | 否   | -                                       | 完整 Cookie 字符串，优先级最高        |
 | `JLC_ECAD_SESSION_FILE`          | 否   | `<config-dir>/session.json`             | 会话文件路径                          |
-| `JLC_ECAD_BASE_URL`              | 否   | `https://www.jlc-ecad.com`              | 接口 Base URL，主要用于测试或本地代理 |
+| `JLC_ECAD_BASE_URL`              | 否   | `https://www.jlc-ecad.com`              | 接口 Base URL；也可指向桌面端本地服务 |
 | `JLC_ECAD_CAS_URL`               | 否   | `https://passport.jlc.com`              | CAS check-login 地址                  |
 | `JLC_ECAD_APP_ID`                | 否   | `jlc_fa_ecad`                           | CAS 应用 ID                           |
 | `JLC_ECAD_TIMEOUT_MS`            | 否   | `15000`                                 | 单次 HTTP 请求超时（毫秒）            |

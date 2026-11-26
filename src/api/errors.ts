@@ -5,6 +5,8 @@ export interface ApiErrorOptions {
   code?: number | string;
   body?: unknown;
   cause?: unknown;
+  /** Tool to call again after signing in. Defaults to jlc_ecad_get_user. */
+  retryTool?: string;
 }
 
 export class JlcEcadApiError extends Error {
@@ -23,13 +25,13 @@ export class JlcEcadApiError extends Error {
 
 export class AuthRequiredError extends JlcEcadApiError {
   constructor(options: ApiErrorOptions = {}) {
-    super(buildAuthRequiredMessage(options.httpStatus, options.code), options);
+    super(buildAuthRequiredMessage(options.httpStatus, options.code, options.retryTool), options);
     this.name = 'AuthRequiredError';
   }
 }
 
 /** Guidance shown to the user (through the MCP client) when no valid session exists. */
-export function buildAuthRequiredMessage(httpStatus?: number, code?: number | string): string {
+export function buildAuthRequiredMessage(httpStatus?: number, code?: number | string, retryTool = 'jlc_ecad_get_user'): string {
   // The editor backend commonly returns HTTP 200 with {"success":false,"code":401},
   // so only mention the HTTP status when that is what actually failed.
   let status = '';
@@ -47,7 +49,7 @@ export function buildAuthRequiredMessage(httpStatus?: number, code?: number | st
     'If yes, run the CLI login in a terminal:',
     '  npx -y jlc-ecad-mcp login',
     '  (from this repository: node dist/index.js login)',
-    'After it completes, call jlc_ecad_get_user again.',
+    `After it completes, call ${retryTool} again.`,
     '',
     'If the client cannot run shell commands, call jlc_ecad_login with {"confirm": true} instead.',
     '',
