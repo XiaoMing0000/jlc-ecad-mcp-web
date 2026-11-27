@@ -43,36 +43,12 @@ export async function handleGetUser(): Promise<CallToolResult> {
   }
 }
 
-const agreementSchema = z.looseObject({});
-
-const userLogsSchema = z.looseObject({
-  page: z.number().int().min(1).optional().describe('1-based page number.'),
-  pageSize: z.number().int().min(1).optional().describe('Page size.'),
-  startTime: z.number().optional().describe('Start timestamp.'),
-  endTime: z.number().optional().describe('End timestamp.'),
-  sort: z.string().optional().describe('Sort order, for example "desc" or "asc".'),
-});
-
-const searchUsersSchema = z.looseObject({
-  q: z.number().int().describe('Search value, sent as `q`.'),
-  limit: z.number().int().min(1).describe('Maximum number of results.'),
-});
-
-const updateUserSchema = z.looseObject({
-  nickname: z.string().describe('New nickname.'),
-  avatar: z.string().describe('New avatar.'),
-});
-
-const getUserByUuidSchema = z.looseObject({
-  uuid: z.string().describe('User UUID.'),
-});
-
 export const ACCEPT_AGREEMENT_TOOL = {
   name: 'jlc_ecad_accept_user_agreement',
   title: 'Accept the user agreement',
   description:
     'Accept the unified JLC EDA privacy agreement with POST /api/editor/user/agreement. ' + 'Returns the raw JSON response from the editor backend.',
-  inputSchema: agreementSchema,
+  inputSchema: z.looseObject({}),
   annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: true },
 };
 
@@ -80,7 +56,13 @@ export const GET_USER_LOGS_TOOL = {
   name: 'jlc_ecad_get_user_logs',
   title: 'Get user operation logs',
   description: 'Read the signed-in user operation logs with GET /api/editor/user/logs. ' + 'Returns the raw JSON response from the editor backend.',
-  inputSchema: userLogsSchema,
+  inputSchema: z.looseObject({
+    page: z.number().int().min(1).optional().describe('1-based page number.'),
+    pageSize: z.number().int().min(1).optional().describe('Page size.'),
+    startTime: z.number().optional().describe('Start timestamp.'),
+    endTime: z.number().optional().describe('End timestamp.'),
+    sort: z.string().optional().describe('Sort order, for example "desc" or "asc".'),
+  }),
   annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: true },
 };
 
@@ -88,7 +70,10 @@ export const SEARCH_USERS_TOOL = {
   name: 'jlc_ecad_search_users',
   title: 'Search users',
   description: 'Search users with GET /api/editor/user/search?q=...&limit=... . ' + 'Returns the raw JSON response from the editor backend.',
-  inputSchema: searchUsersSchema,
+  inputSchema: z.looseObject({
+    q: z.number().int().describe('Search value, sent as `q`.'),
+    limit: z.number().int().min(1).describe('Maximum number of results.'),
+  }),
   annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: true },
 };
 
@@ -96,7 +81,10 @@ export const UPDATE_USER_TOOL = {
   name: 'jlc_ecad_update_user',
   title: 'Update user profile',
   description: 'Update the signed-in user profile with POST /api/editor/user/update. ' + 'Returns the raw JSON response from the editor backend.',
-  inputSchema: updateUserSchema,
+  inputSchema: z.looseObject({
+    nickname: z.string().describe('New nickname.'),
+    avatar: z.string().describe('New avatar.'),
+  }),
   annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: true },
 };
 
@@ -104,7 +92,9 @@ export const GET_USER_BY_UUID_TOOL = {
   name: 'jlc_ecad_get_user_by_uuid',
   title: 'Get another user profile',
   description: 'Read the profile of a specific user with GET /api/editor/user/:uuid. ' + 'Returns the raw JSON response from the editor backend.',
-  inputSchema: getUserByUuidSchema,
+  inputSchema: z.looseObject({
+    uuid: z.string().describe('User UUID.'),
+  }),
   annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: true },
 };
 
@@ -116,7 +106,7 @@ export async function handleAcceptAgreement(args: unknown): Promise<CallToolResu
   });
 }
 
-export async function handleGetUserLogs(args: z.infer<typeof userLogsSchema>): Promise<CallToolResult> {
+export async function handleGetUserLogs(args: z.infer<typeof GET_USER_LOGS_TOOL.inputSchema>): Promise<CallToolResult> {
   return requestTool(GET_USER_LOGS_TOOL.name, {
     method: 'GET',
     path: `${USER_PATH}/logs`,
@@ -130,7 +120,7 @@ export async function handleGetUserLogs(args: z.infer<typeof userLogsSchema>): P
   });
 }
 
-export async function handleSearchUsers(args: z.infer<typeof searchUsersSchema>): Promise<CallToolResult> {
+export async function handleSearchUsers(args: z.infer<typeof SEARCH_USERS_TOOL.inputSchema>): Promise<CallToolResult> {
   return requestTool(SEARCH_USERS_TOOL.name, {
     method: 'GET',
     path: `${USER_PATH}/search`,
@@ -138,7 +128,7 @@ export async function handleSearchUsers(args: z.infer<typeof searchUsersSchema>)
   });
 }
 
-export async function handleUpdateUser(args: z.infer<typeof updateUserSchema>): Promise<CallToolResult> {
+export async function handleUpdateUser(args: z.infer<typeof UPDATE_USER_TOOL.inputSchema>): Promise<CallToolResult> {
   return requestTool(UPDATE_USER_TOOL.name, {
     method: 'POST',
     path: `${USER_PATH}/update`,
@@ -146,7 +136,7 @@ export async function handleUpdateUser(args: z.infer<typeof updateUserSchema>): 
   });
 }
 
-export async function handleGetUserByUuid(args: z.infer<typeof getUserByUuidSchema>): Promise<CallToolResult> {
+export async function handleGetUserByUuid(args: z.infer<typeof GET_USER_BY_UUID_TOOL.inputSchema>): Promise<CallToolResult> {
   return requestTool(GET_USER_BY_UUID_TOOL.name, {
     method: 'GET',
     path: `${USER_PATH}/${encodeURIComponent(args.uuid)}`,

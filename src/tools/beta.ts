@@ -7,15 +7,13 @@ import { requestTool } from './api-tool.js';
 const BETA_VERSION_PATH = '/api/editor/beta/version';
 const BETA_WHITELIST_PATH = '/api/editor/beta/whitelist';
 
-const emptySchema = z.looseObject({});
-
 export const GET_BETA_STATUS_TOOL = {
   name: 'jlc_ecad_get_beta_status',
   title: 'Get beta program status',
   description:
     'Read the beta program information and whether the signed-in user is on the beta whitelist with GET /api/editor/beta/version. ' +
     'Returns the raw JSON response from the editor backend.',
-  inputSchema: emptySchema,
+  inputSchema: z.looseObject({}),
   annotations: {
     readOnlyHint: true,
     idempotentHint: true,
@@ -28,7 +26,7 @@ export const JOIN_BETA_WHITELIST_TOOL = {
   title: 'Join the beta whitelist',
   description:
     'Add the signed-in user to the beta whitelist with POST /api/editor/beta/whitelist. ' + 'Returns the raw JSON response from the editor backend.',
-  inputSchema: emptySchema,
+  inputSchema: z.looseObject({}),
   annotations: {
     readOnlyHint: false,
     destructiveHint: false,

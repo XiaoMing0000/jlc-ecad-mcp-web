@@ -9,15 +9,13 @@ const QRCODE_PATH = '/api/editor/erp/ecad/qrcode';
 const DESIGNER_RIGHTS_PATH = '/api/editor/erp/ecad/member/rights/designer';
 const MEMBER_RIGHTS_PATH = '/api/editor/erp/ecad/member/rights';
 
-const emptySchema = z.looseObject({});
-
 export const GET_OFFICIAL_ACCOUNT_QRCODE_TOOL = {
   name: 'jlc_ecad_get_official_account_qrcode',
   title: 'Get official account QR code',
   description:
     'Read the JLC EDA official-account follow QR code with GET /api/editor/erp/ecad/qrcode. ' +
     'Returns an image when the backend serves one, otherwise the raw JSON response.',
-  inputSchema: emptySchema,
+  inputSchema: z.looseObject({}),
   annotations: {
     readOnlyHint: true,
     idempotentHint: true,
@@ -31,7 +29,7 @@ export const GET_DESIGNER_RIGHTS_TOOL = {
   description:
     'Read the customer designer rights with GET /api/editor/erp/ecad/member/rights/designer. ' +
     'Returns the raw JSON response from the editor backend.',
-  inputSchema: emptySchema,
+  inputSchema: z.looseObject({}),
   annotations: {
     readOnlyHint: true,
     idempotentHint: true,
@@ -45,7 +43,7 @@ export const GET_MEMBER_RIGHTS_TOOL = {
   description:
     'Read the rights the customer currently claimed with GET /api/editor/erp/ecad/member/rights. ' +
     'Returns the raw JSON response from the editor backend.',
-  inputSchema: emptySchema,
+  inputSchema: z.looseObject({}),
   annotations: {
     readOnlyHint: true,
     idempotentHint: true,
