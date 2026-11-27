@@ -150,7 +150,7 @@ export const REMOVE_TEAM_MEMBER_TOOL = {
 export const GET_TEAM_INFO_TOOL = {
   name: 'jlc_ecad_get_team_info',
   title: 'Get team details',
-  description: 'Read team details with POST /api/editor/teams/:uuid/teamInfo. Returns the raw JSON response from the editor backend.',
+  description: 'Read team details with GET /api/editor/teams/:uuid/teamInfo. Returns the raw JSON response from the editor backend.',
   inputSchema: getTeamInfoSchema,
   annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: true },
 };
@@ -266,9 +266,8 @@ export async function handleRemoveTeamMember(args: z.infer<typeof removeTeamMemb
 
 export async function handleGetTeamInfo(args: z.infer<typeof getTeamInfoSchema>): Promise<CallToolResult> {
   return requestTool(GET_TEAM_INFO_TOOL.name, {
-    method: 'POST',
+    method: 'GET',
     path: teamPath(args.teamUuid, '/teamInfo'),
-    body: {},
   });
 }
 

@@ -33,18 +33,6 @@ export const formTools: EcadToolDefinition[] = [
     }),
   },
   {
-    name: 'form_copy_form',
-    description:
-      'Copy a form\n\nCopy the source form `uuid` to `destUuid`; the target is overwritten without a duplicate-name check.</br>Throws `DATA_NOT_FOUND` when the source form does not exist.</br>Returns the target form details; `name` is taken from the source form.</br>Throws `REQUEST_PARAM_ILLEGAL` when required parameters are missing or malformed.',
-    path: '/api/editor/forms/copy',
-    method: 'POST',
-    danger: true,
-    inputSchema: z.looseObject({
-      uuid: z.string().describe('Source form UUID'),
-      destUuid: z.string().describe('Target form UUID'),
-    }),
-  },
-  {
     name: 'form_create_form',
     description:
       'Create a form\n\nCreate a form under `ownerUuid`.</br>Throws `REQUEST_PARAM_ILLEGAL` when `ownerUuid` is missing.</br>Returns the new form details; `history_uuid` is the data UUID.',
@@ -87,15 +75,14 @@ export const formTools: EcadToolDefinition[] = [
   {
     name: 'form_delete_form',
     description:
-      'Delete forms\n\nHard-delete forms, removing both the record and its data.</br>Provide either `uuid` (single) or `uuids` (array); `uuid` takes precedence, and nothing is deleted when both are absent.</br>`ownerUuid` is validated only; records are located by `uuid`/`uuids`.</br>Throws `DATA_NOT_FOUND` when a record does not exist.',
+      'Delete a form\n\nHard-delete a single form by `uuid`, removing both the record and its data.</br>`ownerUuid` is validated only; the record is located by `uuid`.</br>Throws `DATA_NOT_FOUND` when the record does not exist.',
     path: '/api/editor/forms',
     method: 'DELETE',
     danger: true,
     ownerParams: { optional: [], required: ['ownerUuid'] },
     inputSchema: z.looseObject({
       ownerUuid: z.string().describe('Owner UUID (validated only; not used for lookup)'),
-      uuid: z.string().describe('Form UUID (provide either this or `uuids`; this takes precedence)').optional(),
-      uuids: z.array(z.string()).describe('Form UUIDs (provide either this or `uuid`; at least 1)').optional(),
+      uuid: z.string().describe('Form UUID').optional(),
     }),
   },
   {

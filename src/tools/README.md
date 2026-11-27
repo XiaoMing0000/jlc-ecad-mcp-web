@@ -10,10 +10,10 @@ EDA component/device searches), `parts-web.ts` (web-only parts endpoints),
 shared helper `format.ts`.
 
 - Source: `/opt/apps/jlc-ecad/resources/app/server.js`
-- Tools: 104
-- Destructive tools: 53
+- Tools: 99
+- Destructive tools: 52
 - Excluded domains (desktop-app local server only): client
-- Assumed HTTP methods (no matching local route): config_index, system_attribute_get_preference, system_attribute_get_proxy_url
+- Excluded tools (local-server-only or rejected by the public API): config_index, system_attribute_get_preference, system_attribute_get_proxy_url, eplan_macro_read, form_copy_form
 
 Each generated file contains one domain and exports an
 `EcadToolDefinition[]` whose `inputSchema` is a Zod schema converted from the
@@ -23,9 +23,9 @@ wording instead of the desktop app's local file and directory details. The
 executor in `src/ecad/executor.ts` calls the corresponding endpoint under
 `JLC_ECAD_BASE_URL`.
 
-Some `system_*` tools are implemented by the desktop app's local server rather
-than the public website. Point `JLC_ECAD_BASE_URL` at that local server when
-using them.
+Tools that only work against the desktop app's local server, and tools the
+public API rejects, are listed under "Excluded tools" above and are not
+generated.
 
 Regenerate after a JLC ECAD update:
 

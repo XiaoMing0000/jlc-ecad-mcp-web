@@ -8,32 +8,6 @@ import { z } from 'zod';
 import type { EcadToolDefinition } from '../ecad/types.js';
 export const systemTools: EcadToolDefinition[] = [
   {
-    name: 'config_index',
-    description: 'Get editor configuration\n\nReturn the list of enabled configuration items for the given `type`.',
-    path: '/api/editor/system/config',
-    method: 'GET',
-    danger: false,
-    inputSchema: z.looseObject({
-      type: z.literal([1, 2, 3]).describe('Configuration group type (the `type` of the configuration items)'),
-    }),
-  },
-  {
-    name: 'system_attribute_get_preference',
-    description: 'Get system preferences\n\nReturn the system preferences as JSON. Takes no parameters.',
-    path: '/api/editor/system/preference',
-    method: 'GET',
-    danger: false,
-    inputSchema: z.looseObject({}),
-  },
-  {
-    name: 'system_attribute_get_proxy_url',
-    description: 'Get online service URL\n\nReturn the configured `onlineService` URL. Takes no parameters.',
-    path: '/api/editor/system/proxyUrl',
-    method: 'GET',
-    danger: false,
-    inputSchema: z.looseObject({}),
-  },
-  {
     name: 'system_attribute_info',
     description: 'Get system information\n\nReturn system information such as version and run mode. Takes no parameters.',
     path: '/api/editor/system/info',

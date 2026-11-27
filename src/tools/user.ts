@@ -95,7 +95,7 @@ export const SEARCH_USERS_TOOL = {
 export const UPDATE_USER_TOOL = {
   name: 'jlc_ecad_update_user',
   title: 'Update user profile',
-  description: 'Update the signed-in user profile with POST /api/editor/user. ' + 'Returns the raw JSON response from the editor backend.',
+  description: 'Update the signed-in user profile with POST /api/editor/user/update. ' + 'Returns the raw JSON response from the editor backend.',
   inputSchema: updateUserSchema,
   annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: true },
 };
@@ -141,7 +141,7 @@ export async function handleSearchUsers(args: z.infer<typeof searchUsersSchema>)
 export async function handleUpdateUser(args: z.infer<typeof updateUserSchema>): Promise<CallToolResult> {
   return requestTool(UPDATE_USER_TOOL.name, {
     method: 'POST',
-    path: USER_PATH,
+    path: `${USER_PATH}/update`,
     body: { nickname: args.nickname, avatar: args.avatar },
   });
 }

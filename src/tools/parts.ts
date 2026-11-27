@@ -81,7 +81,8 @@ export const partTools: EcadToolDefinition[] = [
   },
   {
     name: 'part_create_part',
-    description: 'Create a part\n\nCreate part data under `owner_uuid` with the given `type`; `attributes` must not be empty.',
+    description:
+      'Create a part\n\nCreate part data under `owner_uuid` with the given `type`; `attributes` must not be empty and must contain the keys required by that type:</br>- `type` 1 (part): `22001`, `22024`</br>- `type` 2 (accessory): `22960`</br>- `type` 3 (drill): `22931`</br>- `type` 4 (supplier): `22900`</br>- `type` 5 (3D model): `11018`</br>Each attribute value is `{ value: string, ...extra fields }`, e.g. `{"owner_uuid": "<uuid>", "type": 1, "accessory": 0, "attributes": {"22001": {"value": "Test part"}, "22024": {"value": "1"}}}`.',
     path: '/api/editor/parts',
     method: 'POST',
     danger: true,
@@ -92,7 +93,11 @@ export const partTools: EcadToolDefinition[] = [
       accessory: z.literal([0, 1]).describe('Accessory type; defaults to 0').optional(),
       isVariable: z.boolean().describe('Whether the part is multi-variant; defaults to false').optional(),
       variable: z.number().describe('Variable number').optional(),
-      attributes: z.looseObject({}).describe('Part attributes; keys are attribute IDs and values are `{ value }`'),
+      attributes: z
+        .looseObject({})
+        .describe(
+          'Part attributes keyed by attribute ID; each value is an object with a `value` string plus optional extra fields of any type, e.g. `{"22001": {"value": "1", "test": 23}}`',
+        ),
     }),
   },
   {
@@ -227,15 +232,26 @@ export const partTools: EcadToolDefinition[] = [
   },
   {
     name: 'part_get_part_list',
-    description: 'List parts of an owner\n\nReturn the parts under `owner_uuid`, newest first, paginated.',
-    path: '/api/editor/parts',
-    method: 'GET',
+    description:
+      'List parts of an owner\n\nReturn the parts under `ownerUuid`, newest first, paginated.</br>`type` is required; `category` filters by attribute values and must contain non-empty `[attribute ID, value]` pairs, e.g. `[["22001", "test"], ["22014", "1"]]`; `attrIds` selects the attribute IDs to return, e.g. `["22001", "22024"]`.',
+    path: '/api/editor/parts/list',
+    method: 'POST',
     danger: false,
-    ownerParams: { optional: ['owner_uuid'], required: [] },
+    ownerParams: { optional: [], required: ['ownerUuid'] },
     inputSchema: z.looseObject({
-      owner_uuid: z.string().describe('Owner UUID; defaults to the current user').optional(),
       page: z.number().describe('Page number; defaults to 1').optional(),
       pageSize: z.number().describe('Page size; defaults to 20').optional(),
+      ownerUuid: z.string().describe('Owner UUID (user or team)'),
+      keyword: z.string().describe('Keyword used to filter the parts').optional(),
+      subCategory: z.boolean().describe('Subcategory filter flag').optional(),
+      accessory: z.number().describe('Accessory flag (0 or 1)').optional(),
+      type: z.literal([1, 2, 3, 4, 5]).describe('Part type: 1 part / 2 accessory / 3 drill / 4 supplier / 5 3D model'),
+      attrIds: z.array(z.string()).describe('Attribute IDs to return, e.g. `["22001", "22024"]`').optional(),
+      category: z
+        .array(z.array(z.string()).length(2))
+        .min(1)
+        .describe('Attribute filters; each entry is `[attribute ID, value]`, e.g. `[["22001", "test"], ["22014", "1"]]`')
+        .optional(),
     }),
   },
   {
@@ -359,7 +375,11 @@ export const partTools: EcadToolDefinition[] = [
     inputSchema: z.looseObject({
       uuid: z.string().describe('Part UUID'),
       type: z.literal([1, 2, 3, 4, 5]).describe('Part type'),
-      attributes: z.looseObject({}).describe('Part attributes; keys are attribute IDs and values are `{ value }`'),
+      attributes: z
+        .looseObject({})
+        .describe(
+          'Part attributes keyed by attribute ID; each value is an object with a `value` string plus optional extra fields of any type, e.g. `{"22001": {"value": "1", "test": 23}}`',
+        ),
     }),
   },
   {
