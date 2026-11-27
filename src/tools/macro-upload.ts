@@ -11,24 +11,6 @@ import { formatToolError } from './format.js';
 const MACRO_PATH = '/api/editor/macro';
 const DEFAULT_CONTENT_TYPE = 'stream';
 
-const uploadMacroDataSchema = z.looseObject({
-  uuid: z.string().describe('Macro UUID.'),
-  macroDataUuid: z
-    .string()
-    .optional()
-    .describe(
-      'Macro data UUID: the `uuid` of one entry in the macro detail `variables` (GET /api/editor/macro?uuid=...). ' +
-        'Resolved from the macro detail when omitted.',
-    ),
-  type: z
-    .number()
-    .int()
-    .optional()
-    .describe('Macro data type (`variables[].type`) used to pick the entry when macroDataUuid is omitted; defaults to the first entry.'),
-  dataBase64: z.string().describe('Macro payload as a base64 string; it is decoded and sent as raw bytes.'),
-  contentType: z.string().optional().describe(`Content-Type header; defaults to "${DEFAULT_CONTENT_TYPE}".`),
-});
-
 export const UPLOAD_MACRO_DATA_TOOL = {
   name: 'jlc_ecad_upload_macro_data',
   title: 'Upload macro data',
@@ -37,7 +19,23 @@ export const UPLOAD_MACRO_DATA_TOOL = {
     'macroDataUuid is the `uuid` of an entry in the macro detail `variables`; when it is omitted it is resolved from GET /api/editor/macro. ' +
     `Pass the payload as base64 in dataBase64; it is sent as raw bytes with Content-Type "${DEFAULT_CONTENT_TYPE}" by default. ` +
     'Returns the raw JSON response from the editor backend.',
-  inputSchema: uploadMacroDataSchema,
+  inputSchema: z.looseObject({
+    uuid: z.string().describe('Macro UUID.'),
+    macroDataUuid: z
+      .string()
+      .optional()
+      .describe(
+        'Macro data UUID: the `uuid` of one entry in the macro detail `variables` (GET /api/editor/macro?uuid=...). ' +
+          'Resolved from the macro detail when omitted.',
+      ),
+    type: z
+      .number()
+      .int()
+      .optional()
+      .describe('Macro data type (`variables[].type`) used to pick the entry when macroDataUuid is omitted; defaults to the first entry.'),
+    dataBase64: z.string().describe('Macro payload as a base64 string; it is decoded and sent as raw bytes.'),
+    contentType: z.string().optional().describe(`Content-Type header; defaults to "${DEFAULT_CONTENT_TYPE}".`),
+  }),
   annotations: {
     readOnlyHint: false,
     destructiveHint: false,
@@ -46,7 +44,7 @@ export const UPLOAD_MACRO_DATA_TOOL = {
   },
 };
 
-export async function handleUploadMacroData(args: z.infer<typeof uploadMacroDataSchema>): Promise<CallToolResult> {
+export async function handleUploadMacroData(args: z.infer<typeof UPLOAD_MACRO_DATA_TOOL.inputSchema>): Promise<CallToolResult> {
   try {
     const macroDataUuid = args.macroDataUuid ? args.macroDataUuid : await resolveMacroDataUuid(args.uuid, args.type);
     return await requestTool(UPLOAD_MACRO_DATA_TOOL.name, {

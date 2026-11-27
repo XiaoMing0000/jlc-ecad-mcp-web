@@ -8,58 +8,6 @@ const ORDER_BOM_PATH = '/api/editor/parts/orderBom';
 const PRODUCTION_PATH = '/api/editor/parts/production';
 const SEARCH_PUBLIC_PATH = '/api/editor/parts/searchPublic';
 
-const addProductionItemSchema = z.looseObject({
-  drillUuid: z.string().optional().describe('Drill record UUID referenced by the tab, if any.'),
-  name: z.string().optional().describe('Production tab name.'),
-  offsetX: z.number().describe('X offset.'),
-  offsetY: z.number().describe('Y offset.'),
-  sort: z.number().describe('Sort order.'),
-});
-
-const updateProductionItemSchema = z.looseObject({
-  uuid: z.string().describe('Production tab UUID to update.'),
-  drillUuid: z.string().optional().describe('Drill record UUID referenced by the tab, if any.'),
-  name: z.string().optional().describe('Production tab name.'),
-  offsetX: z.number().optional().describe('X offset.'),
-  offsetY: z.number().optional().describe('Y offset.'),
-  sort: z.number().optional().describe('Sort order.'),
-});
-
-const orderPartBomSchema = z.looseObject({
-  list: z.array(z.record(z.string(), z.unknown())).describe('BOM line items, forwarded unchanged.'),
-  bom_name: z.string().describe('BOM name.'),
-  customer_code: z.string().describe('Customer code.'),
-  __confirm: z.boolean().optional().describe('Set to true only after the user confirms the order.'),
-});
-
-const addPartProductionSchema = z.looseObject({
-  partUuid: z.string().describe('Part UUID the production tabs belong to.'),
-  data: z.array(addProductionItemSchema).describe('Production tabs to add; items must not carry a uuid.'),
-});
-
-const updatePartProductionSchema = z.looseObject({
-  partUuid: z.string().describe('Part UUID the production tabs belong to.'),
-  data: z.array(updateProductionItemSchema).describe('Production tabs to update; each item needs its uuid.'),
-});
-
-const deletePartProductionSchema = z.looseObject({
-  partUuid: z.string().describe('Part UUID the production tabs belong to.'),
-  uuids: z.array(z.string()).describe('Production tab UUIDs to delete.'),
-  __confirm: z.boolean().optional().describe('Set to true only after the user confirms the deletion.'),
-});
-
-const getPartProductionSchema = z.looseObject({
-  partUuid: z.string().describe('Part UUID whose production tabs to read.'),
-});
-
-const searchPublicPartsSchema = z.looseObject({
-  keyword: z.string().describe('Search keyword.'),
-  type: z.number().describe('Part type expected by the editor API.'),
-  accessory: z.number().optional().describe('Optional accessory type filter.'),
-  page: z.number().int().min(1).describe('1-based page number.'),
-  pageSize: z.number().int().min(1).describe('Page size.'),
-});
-
 export const ORDER_PART_BOM_TOOL = {
   name: 'jlc_ecad_order_part_bom',
   title: 'Order a part BOM',
@@ -67,7 +15,12 @@ export const ORDER_PART_BOM_TOOL = {
     'Place a part BOM order with POST /api/editor/parts/orderBom. ' +
     'This is an outward-facing order, so call it without __confirm first, ask the user to confirm, ' +
     'then call again with {"__confirm": true}. Returns the raw JSON response from the editor backend.',
-  inputSchema: orderPartBomSchema,
+  inputSchema: z.looseObject({
+    list: z.array(z.record(z.string(), z.unknown())).describe('BOM line items, forwarded unchanged.'),
+    bom_name: z.string().describe('BOM name.'),
+    customer_code: z.string().describe('Customer code.'),
+    __confirm: z.boolean().optional().describe('Set to true only after the user confirms the order.'),
+  }),
   annotations: {
     readOnlyHint: false,
     destructiveHint: true,
@@ -80,7 +33,20 @@ export const ADD_PART_PRODUCTION_TOOL = {
   name: 'jlc_ecad_add_part_production',
   title: 'Add part production tabs',
   description: 'Add production tabs to a part with POST /api/editor/parts/production. ' + 'Returns the raw JSON response from the editor backend.',
-  inputSchema: addPartProductionSchema,
+  inputSchema: z.looseObject({
+    partUuid: z.string().describe('Part UUID the production tabs belong to.'),
+    data: z
+      .array(
+        z.looseObject({
+          drillUuid: z.string().optional().describe('Drill record UUID referenced by the tab, if any.'),
+          name: z.string().optional().describe('Production tab name.'),
+          offsetX: z.number().describe('X offset.'),
+          offsetY: z.number().describe('Y offset.'),
+          sort: z.number().describe('Sort order.'),
+        }),
+      )
+      .describe('Production tabs to add; items must not carry a uuid.'),
+  }),
   annotations: {
     readOnlyHint: false,
     destructiveHint: false,
@@ -93,7 +59,21 @@ export const UPDATE_PART_PRODUCTION_TOOL = {
   name: 'jlc_ecad_update_part_production',
   title: 'Update part production tabs',
   description: 'Update production tabs of a part with POST /api/editor/parts/production. ' + 'Returns the raw JSON response from the editor backend.',
-  inputSchema: updatePartProductionSchema,
+  inputSchema: z.looseObject({
+    partUuid: z.string().describe('Part UUID the production tabs belong to.'),
+    data: z
+      .array(
+        z.looseObject({
+          uuid: z.string().describe('Production tab UUID to update.'),
+          drillUuid: z.string().optional().describe('Drill record UUID referenced by the tab, if any.'),
+          name: z.string().optional().describe('Production tab name.'),
+          offsetX: z.number().optional().describe('X offset.'),
+          offsetY: z.number().optional().describe('Y offset.'),
+          sort: z.number().optional().describe('Sort order.'),
+        }),
+      )
+      .describe('Production tabs to update; each item needs its uuid.'),
+  }),
   annotations: {
     readOnlyHint: false,
     destructiveHint: false,
@@ -109,7 +89,11 @@ export const DELETE_PART_PRODUCTION_TOOL = {
     'Delete production tabs from a part with DELETE /api/editor/parts/production. ' +
     'Call it without __confirm first, ask the user to confirm, then call again with {"__confirm": true}. ' +
     'Returns the raw JSON response from the editor backend.',
-  inputSchema: deletePartProductionSchema,
+  inputSchema: z.looseObject({
+    partUuid: z.string().describe('Part UUID the production tabs belong to.'),
+    uuids: z.array(z.string()).describe('Production tab UUIDs to delete.'),
+    __confirm: z.boolean().optional().describe('Set to true only after the user confirms the deletion.'),
+  }),
   annotations: {
     readOnlyHint: false,
     destructiveHint: true,
@@ -123,7 +107,9 @@ export const GET_PART_PRODUCTION_TOOL = {
   title: 'Get part production tabs',
   description:
     "Read a part's production tabs with GET /api/editor/parts/production?partUuid=... . " + 'Returns the raw JSON response from the editor backend.',
-  inputSchema: getPartProductionSchema,
+  inputSchema: z.looseObject({
+    partUuid: z.string().describe('Part UUID whose production tabs to read.'),
+  }),
   annotations: {
     readOnlyHint: true,
     idempotentHint: true,
@@ -135,7 +121,13 @@ export const SEARCH_PUBLIC_PARTS_TOOL = {
   name: 'jlc_ecad_search_public_parts',
   title: 'Search public parts',
   description: 'Search the public part catalog with GET /api/editor/parts/searchPublic. ' + 'Returns the raw JSON response from the editor backend.',
-  inputSchema: searchPublicPartsSchema,
+  inputSchema: z.looseObject({
+    keyword: z.string().describe('Search keyword.'),
+    type: z.number().describe('Part type expected by the editor API.'),
+    accessory: z.number().optional().describe('Optional accessory type filter.'),
+    page: z.number().int().min(1).describe('1-based page number.'),
+    pageSize: z.number().int().min(1).describe('Page size.'),
+  }),
   annotations: {
     readOnlyHint: true,
     idempotentHint: true,
@@ -143,7 +135,7 @@ export const SEARCH_PUBLIC_PARTS_TOOL = {
   },
 };
 
-export async function handleOrderPartBom(args: z.infer<typeof orderPartBomSchema>): Promise<CallToolResult> {
+export async function handleOrderPartBom(args: z.infer<typeof ORDER_PART_BOM_TOOL.inputSchema>): Promise<CallToolResult> {
   if (args.__confirm !== true) {
     return destructiveConfirmation(ORDER_PART_BOM_TOOL.name);
   }
@@ -154,7 +146,7 @@ export async function handleOrderPartBom(args: z.infer<typeof orderPartBomSchema
   });
 }
 
-export async function handleAddPartProduction(args: z.infer<typeof addPartProductionSchema>): Promise<CallToolResult> {
+export async function handleAddPartProduction(args: z.infer<typeof ADD_PART_PRODUCTION_TOOL.inputSchema>): Promise<CallToolResult> {
   return requestTool(ADD_PART_PRODUCTION_TOOL.name, {
     method: 'POST',
     path: PRODUCTION_PATH,
@@ -162,7 +154,7 @@ export async function handleAddPartProduction(args: z.infer<typeof addPartProduc
   });
 }
 
-export async function handleUpdatePartProduction(args: z.infer<typeof updatePartProductionSchema>): Promise<CallToolResult> {
+export async function handleUpdatePartProduction(args: z.infer<typeof UPDATE_PART_PRODUCTION_TOOL.inputSchema>): Promise<CallToolResult> {
   return requestTool(UPDATE_PART_PRODUCTION_TOOL.name, {
     method: 'POST',
     path: PRODUCTION_PATH,
@@ -170,7 +162,7 @@ export async function handleUpdatePartProduction(args: z.infer<typeof updatePart
   });
 }
 
-export async function handleDeletePartProduction(args: z.infer<typeof deletePartProductionSchema>): Promise<CallToolResult> {
+export async function handleDeletePartProduction(args: z.infer<typeof DELETE_PART_PRODUCTION_TOOL.inputSchema>): Promise<CallToolResult> {
   if (args.__confirm !== true) {
     return destructiveConfirmation(DELETE_PART_PRODUCTION_TOOL.name);
   }
@@ -181,7 +173,7 @@ export async function handleDeletePartProduction(args: z.infer<typeof deletePart
   });
 }
 
-export async function handleGetPartProduction(args: z.infer<typeof getPartProductionSchema>): Promise<CallToolResult> {
+export async function handleGetPartProduction(args: z.infer<typeof GET_PART_PRODUCTION_TOOL.inputSchema>): Promise<CallToolResult> {
   return requestTool(GET_PART_PRODUCTION_TOOL.name, {
     method: 'GET',
     path: PRODUCTION_PATH,
@@ -189,7 +181,7 @@ export async function handleGetPartProduction(args: z.infer<typeof getPartProduc
   });
 }
 
-export async function handleSearchPublicParts(args: z.infer<typeof searchPublicPartsSchema>): Promise<CallToolResult> {
+export async function handleSearchPublicParts(args: z.infer<typeof SEARCH_PUBLIC_PARTS_TOOL.inputSchema>): Promise<CallToolResult> {
   return requestTool(SEARCH_PUBLIC_PARTS_TOOL.name, {
     method: 'GET',
     path: SEARCH_PUBLIC_PATH,
