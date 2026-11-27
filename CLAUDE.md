@@ -46,6 +46,13 @@ npm pack --dry-run
 npm publish --access public            # only when the user explicitly asks to publish
 ```
 
+CI and release:
+
+- `.github/workflows/ci.yml` runs on pushes to `main` and pull requests (Node 22/24): `fmt:check`, `lint:check`, `smoke`, and `npm pack --dry-run`.
+- `.github/workflows/release.yml` runs on `v*` tags (or manual dispatch): validates that the tag equals `package.json` `version`, runs the same checks, publishes with `pnpm publish --provenance`, and creates a GitHub Release.
+- The release job needs an `NPM_TOKEN` repository secret with publish rights; the GitHub Release uses the default `GITHUB_TOKEN`. npm provenance uses the job's `id-token: write` permission.
+- Release flow: bump `package.json` `version`, commit, `git tag vX.Y.Z`, then push the tag.
+
 `pnpm run dev` runs the esbuild watcher and spawns `dist/index.js` as a child. To attach an MCP client while debugging, prefer `pnpm run dev:unwatch` or run `node dist/index.js`; do not point the client at the watcher process.
 
 ## Tests
@@ -160,6 +167,7 @@ There is no unit-test framework. `scripts/smoke-test.mjs` is the only automated 
 - `src/version.ts` reads `../package.json` relative to `import.meta.url`; keep the `dist/index.js` ↔ `package.json` layout when changing build output.
 - `dist/` and the legacy project-local `.jlc-ecad-mcp/` directory are gitignored. `package.json` `files` publishes only `dist`, READMEs, and LICENSE; `prepack` runs the build.
 - `.mcp.json` runs `node dist/index.js`, so build before using the project-scoped MCP server.
+- `.github/workflows/ci.yml` covers pushes to `main` and PRs; `.github/workflows/release.yml` publishes on `v*` tags (or manual dispatch) after checking the tag against `package.json` and running the same verification steps.
 
 ## Credential files and cleanup
 

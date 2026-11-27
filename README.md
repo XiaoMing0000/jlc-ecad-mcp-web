@@ -2,9 +2,12 @@
 
 [English](./README.en.md) | 简体中文
 
+[![CI](https://github.com/XiaoMing0000/jlc-ecad-mcp-web/actions/workflows/ci.yml/badge.svg)](https://github.com/XiaoMing0000/jlc-ecad-mcp-web/actions/workflows/ci.yml)
+[![npm](https://img.shields.io/npm/v/jlc-ecad-mcp.svg)](https://www.npmjs.com/package/jlc-ecad-mcp)
+
 用于 [JLC EDA（嘉立创 EDA）](https://www.jlc-ecad.com/editor) 后端接口的 MCP Server，通过 **stdio** 与 AI 客户端通信。
 
-> 当前版本 `0.3.0`（M2）：通过 Chrome CDP 登录、本地会话保存，以及 `GET /api/editor/user`。更多接口见[路线图](https://github.com/XiaoMing0000/jlc-ecad-mcp-web/blob/main/docs/PLAN.md)（[English plan](https://github.com/XiaoMing0000/jlc-ecad-mcp-web/blob/main/docs/PLAN.en.md)）。
+> 当前版本 `1.0.0`：覆盖 141 个工具（手写 + 桌面端迁移），详见[提供的工具](#提供的工具)。
 
 ## 功能
 
@@ -295,6 +298,22 @@ pnpm run fmt          # 格式化
 ```bash
 node dist/index.js login
 ```
+
+## CI 与发布
+
+CI 在 push 到 `main` 和 PR 时运行（Node 22 / 24）：`fmt:check`、`lint:check`、`smoke`，并执行 `npm pack --dry-run` 校验发布内容。工作流见 [.github/workflows/ci.yml](.github/workflows/ci.yml)。
+
+发布由 `v*` 标签触发（[.github/workflows/release.yml](.github/workflows/release.yml)）：先校验标签版本与 `package.json` 的 `version` 一致，再运行同样的检查，最后执行 `pnpm publish --access public --provenance` 并创建 GitHub Release。
+
+```bash
+pnpm version patch --no-git-tag-version   # 或 minor / major
+git add package.json
+git commit -m "chore(release): 1.0.1"
+git tag v1.0.1
+git push origin main --tags
+```
+
+需要在仓库 Secrets 中配置 `NPM_TOKEN`（npm 的 Automation 或 Granular token，需有发布 `jlc-ecad-mcp` 的权限）。GitHub Release 使用默认的 `GITHUB_TOKEN`，无需额外配置；发布带 npm provenance，来源信息会显示在 npm 包页面。
 
 ## 登录流程
 

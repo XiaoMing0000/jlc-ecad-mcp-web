@@ -2,9 +2,12 @@
 
 English | [简体中文](./README.md)
 
+[![CI](https://github.com/XiaoMing0000/jlc-ecad-mcp-web/actions/workflows/ci.yml/badge.svg)](https://github.com/XiaoMing0000/jlc-ecad-mcp-web/actions/workflows/ci.yml)
+[![npm](https://img.shields.io/npm/v/jlc-ecad-mcp.svg)](https://www.npmjs.com/package/jlc-ecad-mcp)
+
 An MCP server (stdio) for the [JLC EDA](https://www.jlc-ecad.com/editor) editor backend API.
 
-> Current version `0.3.0` (M2): Chrome CDP login, local session storage, and `GET /api/editor/user`. More endpoints are on the [roadmap](https://github.com/XiaoMing0000/jlc-ecad-mcp-web/blob/main/docs/PLAN.en.md) ([中文计划](https://github.com/XiaoMing0000/jlc-ecad-mcp-web/blob/main/docs/PLAN.md)).
+> Current version `1.0.0`: 141 tools (hand-written plus the imported desktop catalog); see [Tools](#tools).
 
 ## Features
 
@@ -295,6 +298,22 @@ Local login:
 ```bash
 node dist/index.js login
 ```
+
+## CI and release
+
+CI runs on pushes to `main` and on pull requests (Node 22 / 24): `fmt:check`, `lint:check`, `smoke`, and `npm pack --dry-run` to verify the published contents. See [.github/workflows/ci.yml](.github/workflows/ci.yml).
+
+Releases are triggered by `v*` tags ([.github/workflows/release.yml](.github/workflows/release.yml)): the workflow checks that the tag matches `package.json` `version`, runs the same checks, publishes with `pnpm publish --access public --provenance`, and creates a GitHub Release.
+
+```bash
+pnpm version patch --no-git-tag-version   # or minor / major
+git add package.json
+git commit -m "chore(release): 1.0.1"
+git tag v1.0.1
+git push origin main --tags
+```
+
+Configure an `NPM_TOKEN` repository secret with permission to publish `jlc-ecad-mcp` (npm automation or granular token). The GitHub Release uses the default `GITHUB_TOKEN`; no extra secret is needed. Publishing uses npm provenance, so the source information appears on the npm package page.
 
 ## Login flow
 
