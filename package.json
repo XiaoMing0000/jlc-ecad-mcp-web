@@ -1,5 +1,5 @@
 {
-  "name": "jlc-ecad-mcp",
+  "name": "jlc-ecad-mcp-web",
   "version": "1.0.0",
   "description": "MCP server (stdio) for the JLC EDA (jlc-ecad.com) editor backend API.",
   "type": "module",

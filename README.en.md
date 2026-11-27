@@ -303,7 +303,7 @@ node dist/index.js login
 
 CI runs on pushes to `main` and on pull requests (Node 22 / 24): `fmt:check`, `lint:check`, `smoke`, and `npm pack --dry-run` to verify the published contents. See [.github/workflows/ci.yml](.github/workflows/ci.yml).
 
-Releases are triggered by `v*` tags ([.github/workflows/release.yml](.github/workflows/release.yml)): the workflow checks that the tag matches `package.json` `version`, runs the same checks, publishes with `pnpm publish --access public --provenance`, and creates a GitHub Release.
+Releases are triggered by `vX.Y.Z` tags ([.github/workflows/release.yml](.github/workflows/release.yml)): the workflow checks that the tag matches `package.json` `version`, runs the same checks, builds, publishes with npm Trusted Publishing (OIDC) via `npm publish --access=public`, and creates a GitHub Release.
 
 ```bash
 pnpm version patch --no-git-tag-version   # or minor / major
@@ -313,7 +313,27 @@ git tag v1.0.1
 git push origin main --tags
 ```
 
-Configure an `NPM_TOKEN` repository secret with permission to publish `jlc-ecad-mcp` (npm automation or granular token). The GitHub Release uses the default `GITHUB_TOKEN`; no extra secret is needed. Publishing uses npm provenance, so the source information appears on the npm package page.
+Before the first release, configure a Trusted Publisher on npm (no `NPM_TOKEN` needed):
+
+- Package: `jlc-ecad-mcp` → Settings → Trusted Publisher → GitHub Actions
+- Organization / User: `XiaoMing0000`
+- Repository: `jlc-ecad-mcp-web`
+- Workflow filename: `release.yml`
+- Environment: leave empty
+
+If `jlc-ecad-mcp` does not exist on npm yet, publish one version with a token (or create the package) before configuring the Trusted Publisher. The release tag must point to a commit containing this `release.yml`, so merge the workflow into `main` before tagging.
+
+The workflow uses `id-token: write` so npm can generate provenance; the GitHub Release uses the default `GITHUB_TOKEN`.
+
+Published files are controlled by the `package.json` `files` whitelist:
+
+```json
+"files": ["dist", "README.md", "README.en.md", "LICENSE"]
+```
+
+- Published: `dist/index.js` (built by `prepack`), both READMEs, LICENSE; npm includes `package.json` automatically.
+- Not published: `src/`, `scripts/`, `docs/`, `.github/`, `config/`, `tsconfig.json`, `pnpm-lock.yaml`, and so on.
+- The `files` whitelist is enough; no `.npmignore` is needed. Preview the tarball locally with `npm pack --dry-run`.
 
 ## Login flow
 

@@ -49,8 +49,9 @@ npm publish --access public            # only when the user explicitly asks to p
 CI and release:
 
 - `.github/workflows/ci.yml` runs on pushes to `main` and pull requests (Node 22/24): `fmt:check`, `lint:check`, `smoke`, and `npm pack --dry-run`.
-- `.github/workflows/release.yml` runs on `v*` tags (or manual dispatch): validates that the tag equals `package.json` `version`, runs the same checks, publishes with `pnpm publish --provenance`, and creates a GitHub Release.
-- The release job needs an `NPM_TOKEN` repository secret with publish rights; the GitHub Release uses the default `GITHUB_TOKEN`. npm provenance uses the job's `id-token: write` permission.
+- `.github/workflows/release.yml` runs on `vX.Y.Z` tags (or manual dispatch): validates that the tag equals `package.json` `version`, runs the same checks, builds, publishes with `npm publish --access=public` using npm Trusted Publishing (OIDC), and creates a GitHub Release.
+- No `NPM_TOKEN` is needed: configure a Trusted Publisher on npm for `XiaoMing0000/jlc-ecad-mcp-web`, workflow `release.yml`, empty environment. The job needs `id-token: write`; the GitHub Release uses the default `GITHUB_TOKEN`.
+- Published files come from the `files` whitelist (`dist`, `README.md`, `README.en.md`, `LICENSE`); `prepack` builds `dist`, and npm includes `package.json` automatically. `src/`, `scripts/`, `docs/`, `.github/`, and `config/` are not published.
 - Release flow: bump `package.json` `version`, commit, `git tag vX.Y.Z`, then push the tag.
 
 `pnpm run dev` runs the esbuild watcher and spawns `dist/index.js` as a child. To attach an MCP client while debugging, prefer `pnpm run dev:unwatch` or run `node dist/index.js`; do not point the client at the watcher process.

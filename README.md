@@ -303,7 +303,7 @@ node dist/index.js login
 
 CI 在 push 到 `main` 和 PR 时运行（Node 22 / 24）：`fmt:check`、`lint:check`、`smoke`，并执行 `npm pack --dry-run` 校验发布内容。工作流见 [.github/workflows/ci.yml](.github/workflows/ci.yml)。
 
-发布由 `v*` 标签触发（[.github/workflows/release.yml](.github/workflows/release.yml)）：先校验标签版本与 `package.json` 的 `version` 一致，再运行同样的检查，最后执行 `pnpm publish --access public --provenance` 并创建 GitHub Release。
+发布由 `vX.Y.Z` 标签触发（[.github/workflows/release.yml](.github/workflows/release.yml)）：校验标签与 `package.json` 的 `version` 一致，运行同样的检查，构建后用 npm Trusted Publishing（OIDC）执行 `npm publish --access=public`，并创建 GitHub Release。
 
 ```bash
 pnpm version patch --no-git-tag-version   # 或 minor / major
@@ -313,7 +313,27 @@ git tag v1.0.1
 git push origin main --tags
 ```
 
-需要在仓库 Secrets 中配置 `NPM_TOKEN`（npm 的 Automation 或 Granular token，需有发布 `jlc-ecad-mcp` 的权限）。GitHub Release 使用默认的 `GITHUB_TOKEN`，无需额外配置；发布带 npm provenance，来源信息会显示在 npm 包页面。
+首次发布前，在 npm 包设置中配置 Trusted Publisher（无需 `NPM_TOKEN`）：
+
+- Package：`jlc-ecad-mcp` → Settings → Trusted Publisher → GitHub Actions
+- Organization / User：`XiaoMing0000`
+- Repository：`jlc-ecad-mcp-web`
+- Workflow filename：`release.yml`
+- Environment：留空
+
+如果 npm 上还没有 `jlc-ecad-mcp` 这个包，需要先用 token 发布一次（或先在 npm 创建包），再配置 Trusted Publisher。发布标签必须指向包含当前 `release.yml` 的提交，因此先把本工作流合并到 `main` 再打标签。
+
+`release.yml` 使用 `id-token: write` 让 npm 生成 provenance；GitHub Release 使用默认 `GITHUB_TOKEN`。
+
+发布文件由 `package.json` 的 `files` 白名单控制：
+
+```json
+"files": ["dist", "README.md", "README.en.md", "LICENSE"]
+```
+
+- 会发布：`dist/index.js`（`prepack` 自动构建）、两个 README、LICENSE；`package.json` 由 npm 自动包含。
+- 不会发布：`src/`、`scripts/`、`docs/`、`.github/`、`config/`、`tsconfig.json`、`pnpm-lock.yaml` 等。
+- 使用 `files` 白名单即可，不需要 `.npmignore`；本地预览包内容：`npm pack --dry-run`。
 
 ## 登录流程
 
