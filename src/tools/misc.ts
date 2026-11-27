@@ -8,16 +8,6 @@ import { z } from 'zod';
 import type { EcadToolDefinition } from '../ecad/types.js';
 export const miscTools: EcadToolDefinition[] = [
   {
-    name: 'eplan_macro_read',
-    description: 'Read an EPLAN macro\n\nReturn the content of a single EPLAN macro.',
-    path: '/api/editor/eplan/macro/read',
-    method: 'POST',
-    danger: false,
-    inputSchema: z.looseObject({
-      path: z.string().describe('Macro UUID'),
-    }),
-  },
-  {
     name: 'erp_rights_designer',
     description:
       'Get designer copyright rights\n\nReturn designer copyright rights (`rightsType`, `versionClassification`, `remainingDays`). The response uses the ERP service raw `data` wrapper instead of the editor standard `result` wrapper.',

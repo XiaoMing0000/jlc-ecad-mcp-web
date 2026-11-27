@@ -138,80 +138,80 @@ editor-cookies.json
 
 ## Tools
 
-The server registers **146** tools: 42 hand-written tools (login/user, five user settings operations, two EDA searches, six web-only parts operations, four product catalog operations, three rights operations, two beta operations, four category operations, one macro data upload, and twelve team management operations) and **104** ECAD tools imported from the JLC ECAD desktop app (`resources/app/server.js`); `client_*` tools are implemented by the desktop app's local server and are not registered.
+The server registers **141** tools: 42 hand-written tools (login/user, five user settings operations, two EDA searches, six web-only parts operations, four product catalog operations, three rights operations, two beta operations, four category operations, one macro data upload, and twelve team management operations) and **99** ECAD tools imported from the JLC ECAD desktop app (`resources/app/server.js`). `client_*` tools are implemented by the desktop app's local server and are not registered; `config_index`, `system_attribute_get_preference`, `system_attribute_get_proxy_url`, `eplan_macro_read`, and `form_copy_form` are also not registered because they only work against the local server or are rejected by the public API.
 
-| Tool                                   | Description                                                                                             |
-| -------------------------------------- | ------------------------------------------------------------------------------------------------------- |
-| `jlc_ecad_login`                       | Fallback when the CLI cannot run; requires user confirmation and `{"confirm": true}`                    |
-| `jlc_ecad_logout`                      | Calls `GET /api/editor/logout` to end the server session (local cookie files are kept)                  |
-| `jlc_ecad_get_user`                    | Calls `GET /api/editor/user` and returns the raw user JSON response                                     |
-| `jlc_ecad_accept_user_agreement`       | Calls `POST /api/editor/user/agreement` to accept the privacy agreement                                 |
-| `jlc_ecad_get_user_logs`               | Calls `GET /api/editor/user/logs` to read user operation logs                                           |
-| `jlc_ecad_search_users`                | Calls `GET /api/editor/user/search` to search users by `q` and `limit`                                  |
-| `jlc_ecad_update_user`                 | Calls `POST /api/editor/user` to update the nickname and avatar                                         |
-| `jlc_ecad_get_user_by_uuid`            | Calls `GET /api/editor/user/:uuid` to read a specific user profile                                      |
-| `jlc_ecad_search_components`           | Calls `POST /api/editor/eda/components/searchByIds` to look up components by UUID                       |
-| `jlc_ecad_search_devices`              | Calls `POST /api/editor/eda/devices/searchByIds` to look up devices by UUID                             |
-| `jlc_ecad_order_part_bom`              | Calls `POST /api/editor/parts/orderBom` to place a BOM order; needs `{"__confirm": true}`               |
-| `jlc_ecad_add_part_production`         | Calls `POST /api/editor/parts/production` to add production tabs                                        |
-| `jlc_ecad_update_part_production`      | Calls `POST /api/editor/parts/production` to update production tabs                                     |
-| `jlc_ecad_delete_part_production`      | Calls `DELETE /api/editor/parts/production` to delete production tabs; needs `{"__confirm": true}`      |
-| `jlc_ecad_get_part_production`         | Calls `GET /api/editor/parts/production` to read production tabs                                        |
-| `jlc_ecad_search_public_parts`         | Calls `GET /api/editor/parts/searchPublic` to search the public part catalog                            |
-| `jlc_ecad_get_product_filters`         | Calls `GET /api/editor/product/filter` to read product filter options                                   |
-| `jlc_ecad_list_products`               | Calls `GET /api/editor/product/list` to list products                                                   |
-| `jlc_ecad_list_products_post`          | Calls `POST /api/editor/product/list` to list products with a JSON body                                 |
-| `jlc_ecad_get_product_tree`            | Calls `GET /api/editor/product/tree` to read the product category tree                                  |
-| `jlc_ecad_get_official_account_qrcode` | Calls `GET /api/editor/erp/ecad/qrcode` and returns the QR code image when served as one                |
-| `jlc_ecad_get_designer_rights`         | Calls `GET /api/editor/erp/ecad/member/rights/designer` to read designer rights                         |
-| `jlc_ecad_get_member_rights`           | Calls `GET /api/editor/erp/ecad/member/rights` to read the currently claimed rights                     |
-| `jlc_ecad_get_beta_status`             | Calls `GET /api/editor/beta/version` for beta info and the whitelist check                              |
-| `jlc_ecad_join_beta_whitelist`         | Calls `POST /api/editor/beta/whitelist` to add the current user to the beta whitelist                   |
-| `jlc_ecad_create_category`             | Calls `POST /api/editor/categories` to create a category                                                |
-| `jlc_ecad_list_categories`             | Calls `GET /api/editor/categories` to read categories                                                   |
-| `jlc_ecad_update_category`             | Calls `POST /api/editor/categories/:uuid` to update a category                                          |
-| `jlc_ecad_delete_category`             | Calls `POST /api/editor/categories/:uuid/delete` to delete a category; needs `{"__confirm": true}`      |
-| `jlc_ecad_upload_macro_data`           | Calls `PUT /api/editor/macro/:uuid/macroDataUuid` to upload raw macro bytes with `Content-Type: stream` |
-| `jlc_ecad_add_team_member`             | Calls `POST /api/editor/teams/:uuid/members/add` to add a team member                                   |
-| `jlc_ecad_create_team`                 | Calls `POST /api/editor/teams/create` to create a team                                                  |
-| `jlc_ecad_delete_team`                 | Calls `POST /api/editor/teams/:uuid/delete` to delete a team; needs `{"__confirm": true}`               |
-| `jlc_ecad_list_teams`                  | Calls `GET /api/editor/teams` to list teams                                                             |
-| `jlc_ecad_get_team_logs`               | Calls `GET /api/editor/teams/:uuid/logs` to read team operation logs                                    |
-| `jlc_ecad_get_other_teams`             | Calls `GET /api/editor/teams/otherTeams` to read related teams                                          |
-| `jlc_ecad_remove_team_member`          | Calls `POST /api/editor/teams/:uuid/members/remove` to remove a member; needs `{"__confirm": true}`     |
-| `jlc_ecad_get_team_info`               | Calls `POST /api/editor/teams/:uuid/teamInfo` to read team details                                      |
-| `jlc_ecad_transfer_team`               | Calls `POST /api/editor/teams/:uuid/transfer` to transfer a team; needs `{"__confirm": true}`           |
-| `jlc_ecad_update_team`                 | Calls `POST /api/editor/teams/:uuid/update` to update team information                                  |
-| `jlc_ecad_update_team_member_role`     | Calls `POST /api/editor/teams/:uuid/members/:memberUuid/update` to update a member role                 |
-| `jlc_ecad_update_team_member_remark`   | Calls `POST /api/editor/teams/:uuid/updateRemark` to update a member remark                             |
+| Tool                                   | Description                                                                                                                                                                                       |
+| -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `jlc_ecad_login`                       | Fallback when the CLI cannot run; requires user confirmation and `{"confirm": true}`                                                                                                              |
+| `jlc_ecad_logout`                      | Calls `GET /api/editor/logout` to end the server session (local cookie files are kept)                                                                                                            |
+| `jlc_ecad_get_user`                    | Calls `GET /api/editor/user` and returns the raw user JSON response                                                                                                                               |
+| `jlc_ecad_accept_user_agreement`       | Calls `POST /api/editor/user/agreement` to accept the privacy agreement                                                                                                                           |
+| `jlc_ecad_get_user_logs`               | Calls `GET /api/editor/user/logs` to read user operation logs                                                                                                                                     |
+| `jlc_ecad_search_users`                | Calls `GET /api/editor/user/search` to search users by `q` and `limit`                                                                                                                            |
+| `jlc_ecad_update_user`                 | Calls `POST /api/editor/user/update` to update the nickname and avatar                                                                                                                            |
+| `jlc_ecad_get_user_by_uuid`            | Calls `GET /api/editor/user/:uuid` to read a specific user profile                                                                                                                                |
+| `jlc_ecad_search_components`           | Calls `POST /api/editor/eda/components/searchByIds` to look up components by UUID                                                                                                                 |
+| `jlc_ecad_search_devices`              | Calls `POST /api/editor/eda/devices/searchByIds` to look up devices by UUID                                                                                                                       |
+| `jlc_ecad_order_part_bom`              | Calls `POST /api/editor/parts/orderBom` to place a BOM order; needs `{"__confirm": true}`                                                                                                         |
+| `jlc_ecad_add_part_production`         | Calls `POST /api/editor/parts/production` to add production tabs                                                                                                                                  |
+| `jlc_ecad_update_part_production`      | Calls `POST /api/editor/parts/production` to update production tabs                                                                                                                               |
+| `jlc_ecad_delete_part_production`      | Calls `DELETE /api/editor/parts/production` to delete production tabs; needs `{"__confirm": true}`                                                                                                |
+| `jlc_ecad_get_part_production`         | Calls `GET /api/editor/parts/production` to read production tabs                                                                                                                                  |
+| `jlc_ecad_search_public_parts`         | Calls `GET /api/editor/parts/searchPublic` to search the public part catalog                                                                                                                      |
+| `jlc_ecad_get_product_filters`         | Calls `GET /api/editor/product/filter` to read product filter options                                                                                                                             |
+| `jlc_ecad_list_products`               | Calls `GET /api/editor/product/list` to list products                                                                                                                                             |
+| `jlc_ecad_list_products_post`          | Calls `POST /api/editor/product/list` to list products with a JSON body                                                                                                                           |
+| `jlc_ecad_get_product_tree`            | Calls `GET /api/editor/product/tree` to read the product category tree                                                                                                                            |
+| `jlc_ecad_get_official_account_qrcode` | Calls `GET /api/editor/erp/ecad/qrcode` and returns the QR code image when served as one                                                                                                          |
+| `jlc_ecad_get_designer_rights`         | Calls `GET /api/editor/erp/ecad/member/rights/designer` to read designer rights                                                                                                                   |
+| `jlc_ecad_get_member_rights`           | Calls `GET /api/editor/erp/ecad/member/rights` to read the currently claimed rights                                                                                                               |
+| `jlc_ecad_get_beta_status`             | Calls `GET /api/editor/beta/version` for beta info and the whitelist check                                                                                                                        |
+| `jlc_ecad_join_beta_whitelist`         | Calls `POST /api/editor/beta/whitelist` to add the current user to the beta whitelist                                                                                                             |
+| `jlc_ecad_create_category`             | Calls `POST /api/editor/categories` to create a category                                                                                                                                          |
+| `jlc_ecad_list_categories`             | Calls `GET /api/editor/categories` to read categories (the `type` values are sent as the `type[]` query key)                                                                                      |
+| `jlc_ecad_update_category`             | Calls `POST /api/editor/categories/:uuid` to update a category                                                                                                                                    |
+| `jlc_ecad_delete_category`             | Calls `POST /api/editor/categories/:uuid/delete` to delete a category; needs `{"__confirm": true}`                                                                                                |
+| `jlc_ecad_upload_macro_data`           | Calls `PUT /api/editor/macro/:uuid/:macroDataUuid` to upload raw macro bytes with `Content-Type: stream`; when `macroDataUuid` is omitted it is resolved from the macro detail `variables[].uuid` |
+| `jlc_ecad_add_team_member`             | Calls `POST /api/editor/teams/:uuid/members/add` to add a team member                                                                                                                             |
+| `jlc_ecad_create_team`                 | Calls `POST /api/editor/teams/create` to create a team                                                                                                                                            |
+| `jlc_ecad_delete_team`                 | Calls `POST /api/editor/teams/:uuid/delete` to delete a team; needs `{"__confirm": true}`                                                                                                         |
+| `jlc_ecad_list_teams`                  | Calls `GET /api/editor/teams` to list teams                                                                                                                                                       |
+| `jlc_ecad_get_team_logs`               | Calls `GET /api/editor/teams/:uuid/logs` to read team operation logs                                                                                                                              |
+| `jlc_ecad_get_other_teams`             | Calls `GET /api/editor/teams/otherTeams` to read related teams                                                                                                                                    |
+| `jlc_ecad_remove_team_member`          | Calls `POST /api/editor/teams/:uuid/members/remove` to remove a member; needs `{"__confirm": true}`                                                                                               |
+| `jlc_ecad_get_team_info`               | Calls `POST /api/editor/teams/:uuid/teamInfo` to read team details                                                                                                                                |
+| `jlc_ecad_transfer_team`               | Calls `POST /api/editor/teams/:uuid/transfer` to transfer a team; needs `{"__confirm": true}`                                                                                                     |
+| `jlc_ecad_update_team`                 | Calls `POST /api/editor/teams/:uuid/update` to update team information                                                                                                                            |
+| `jlc_ecad_update_team_member_role`     | Calls `POST /api/editor/teams/:uuid/members/:memberUuid/update` to update a member role                                                                                                           |
+| `jlc_ecad_update_team_member_remark`   | Calls `POST /api/editor/teams/:uuid/updateRemark` to update a member remark                                                                                                                       |
 
 ### Imported ECAD tools
 
 The imported tools keep the desktop app's names and argument constraints; tool and property descriptions are translated to English by the generator, using owner/UUID wording without local file or directory details. Each `inputSchema` is emitted directly as Zod (`z.looseObject`, `z.string`, `z.array`, ...), split by domain under `src/tools/`. `tools/list` re-renders JSON Schema from Zod, dropping annotation keywords such as `format`:
 
-| Domain          | Tools   | File             |
-| --------------- | ------- | ---------------- |
-| System          | 4       | `system.ts`      |
-| Misc            | 2       | `misc.ts`        |
-| Forms           | 11      | `forms.ts`       |
-| Layers          | 6       | `layers.ts`      |
-| Libraries       | 5       | `libraries.ts`   |
-| Macros          | 8       | `macros.ts`      |
-| Parts           | 24      | `parts.ts`       |
-| Plot frames     | 9       | `plot-frames.ts` |
-| Projects        | 16      | `projects.ts`    |
-| Symbols         | 9       | `symbols.ts`     |
-| Teams           | 2       | `teams.ts`       |
-| User preference | 8       | `user-tools.ts`  |
-| **Total**       | **104** |                  |
+| Domain          | Tools  | File             |
+| --------------- | ------ | ---------------- |
+| System          | 1      | `system.ts`      |
+| Misc            | 1      | `misc.ts`        |
+| Forms           | 10     | `forms.ts`       |
+| Layers          | 6      | `layers.ts`      |
+| Libraries       | 5      | `libraries.ts`   |
+| Macros          | 8      | `macros.ts`      |
+| Parts           | 24     | `parts.ts`       |
+| Plot frames     | 9      | `plot-frames.ts` |
+| Projects        | 16     | `projects.ts`    |
+| Symbols         | 9      | `symbols.ts`     |
+| Teams           | 2      | `teams.ts`       |
+| User preference | 8      | `user-tools.ts`  |
+| **Total**       | **99** |                  |
 
 Usage notes:
 
-- **Destructive tools** (53) require `{"__confirm": true}` after the user confirms; without it no request is sent.
+- **Destructive tools** (52) require `{"__confirm": true}` after the user confirms; without it no request is sent.
 - `GET` tools send arguments in the query string, with arrays serialized as `key[]=...` to match the editor frontend. `POST`/`PUT`/`PATCH`/`DELETE` default to a JSON body.
 - Path parameters such as `:uuid` and `:projectUuid` are URL-encoded automatically.
 - When a tool's schema has an optional `ownerUuid`/`owner_uuid`, the current user's UUID is filled in automatically.
-- Some `system_*` tools are implemented by the desktop app's local server. Point `JLC_ECAD_BASE_URL` at that local server to use them.
+- Tools that only work against the desktop app's local server (`config_index`, `system_attribute_get_preference`, `system_attribute_get_proxy_url`, `eplan_macro_read`) and `form_copy_form` (rejected by the public API) are excluded from the catalog. Adjust `excludedTools` in `scripts/import-ecad-catalog.mjs` and regenerate to change this.
 - Desktop schemas may differ slightly from the online API; API errors include the raw response body to make differences easy to diagnose.
 - For binary request bodies, pass `__rawBodyBase64` (base64 string) and optionally `__contentType`; this is used by chunked-upload endpoints.
 - Regenerate the catalog after a desktop-app update: `pnpm run import:ecad /path/to/resources/app/server.js`, then `pnpm run fmt`.

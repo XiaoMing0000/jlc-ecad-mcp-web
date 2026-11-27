@@ -16,7 +16,7 @@ const createCategorySchema = z.looseObject({
 
 const listCategoriesSchema = z.looseObject({
   user_uuid: z.string().describe('Owner UUID: a user UUID or a team UUID.'),
-  type: z.number().int().describe('Category type; the editor currently uses 6.'),
+  type: z.array(z.number().int()).describe('Category types; the editor currently uses [6].'),
 });
 
 const deleteCategorySchema = z.looseObject({
@@ -47,7 +47,8 @@ export const CREATE_CATEGORY_TOOL = {
 export const LIST_CATEGORIES_TOOL = {
   name: 'jlc_ecad_list_categories',
   title: 'List categories',
-  description: 'Read categories with GET /api/editor/categories?user_uuid=...&type=... . ' + 'Returns the raw JSON response from the editor backend.',
+  description:
+    'Read categories with GET /api/editor/categories?user_uuid=...&type[]=... . ' + 'Returns the raw JSON response from the editor backend.',
   inputSchema: listCategoriesSchema,
   annotations: {
     readOnlyHint: true,

@@ -279,16 +279,16 @@ The cookie is read on every request, so no restart is needed after updating it.
 
 ### M5：迁移桌面端 MCP 工具目录
 
-- [x] 从 JLC ECAD 桌面端 `resources/app/server.js` 提取完整工具目录（`var fx` 到 `var Bx`，共 114 个工具，覆盖原请求范围 25088–27850 及其后的用户偏好工具）；其中 10 个 `client_*` 工具只由桌面端本地服务实现，已排除，注册 104 个。
+- [x] 从 JLC ECAD 桌面端 `resources/app/server.js` 提取完整工具目录（`var fx` 到 `var Bx`，共 114 个工具，覆盖原请求范围 25088–27850 及其后的用户偏好工具）；其中 10 个 `client_*` 工具只由桌面端本地服务实现，另有 5 个仅本地可用或线上不可用的工具（`config_index`、`system_attribute_get_preference`、`system_attribute_get_proxy_url`、`eplan_macro_read`、`form_copy_form`）由生成器的 `excludedTools` 排除，注册 99 个。
 - [x] 按业务域拆分到 `src/tools/`：system、misc、forms、layers、libraries、macros、parts、plot-frames、projects、symbols、teams、user（`client` 域已排除）。
 - [x] 保留原始名称和参数约束；工具与参数描述由生成器翻译为英文（使用归属/UUID 语义，去掉本地文件/目录细节）；生成器直接把桌面端 JSON Schema 转成 Zod 代码（`z.looseObject`/`z.string`/`z.array` 等），由 SDK `McpServer.registerTool` 注册；`tools/list` 由 Zod 重新生成 JSON Schema（`format` 等注解字段不保留）。
 - [x] 新增通用执行器 `src/ecad/executor.ts`：路径参数编码、GET query（数组使用 `key[]`）、写请求 JSON body、二进制响应、`__rawBodyBase64`。
-- [x] 破坏性工具（53 个）要求用户确认后以 `{"__confirm": true}` 调用；未确认不发出请求。
+- [x] 破坏性工具（52 个）要求用户确认后以 `{"__confirm": true}` 调用；未确认不发出请求。
 - [x] 可选 `ownerUuid`/`owner_uuid` 自动填入当前用户 UUID（按 Cookie 缓存），生成器把该信息写入 `ownerParams`；必填的 owner 参数不会被隐式填入。
 - [x] McpServer 用 Zod 校验 `tools/call` 参数，执行器不再单独校验；zod 经 esbuild 打包，包仍保持零运行时依赖。
 - [x] `scripts/import-ecad-catalog.mjs` 可从新版桌面端重新生成目录。
-- [x] smoke test 覆盖工具列表（146 个）、GET query、路径参数编码、破坏性确认、EDA 检索、部件 Web 操作、产品目录、权益/公测接口、分类接口、宏数据上传、团队管理和用户设置接口。
-- 说明：部分 `system_*` 工具依赖桌面端本地服务；将 `JLC_ECAD_BASE_URL` 指向该服务即可使用。桌面端 schema 与线上接口可能存在差异，错误响应会原样返回。
+- [x] smoke test 覆盖工具列表（141 个）、GET query、路径参数编码、破坏性确认、EDA 检索、部件 Web 操作、产品目录、权益/公测接口、分类接口、宏数据上传、团队管理和用户设置接口。
+- 说明：仅桌面端本地可用的工具（`config_index`、`system_attribute_get_preference`、`system_attribute_get_proxy_url`、`eplan_macro_read`）已由生成器排除，不再注册；桌面端 schema 与线上接口可能存在差异，错误响应会原样返回。
 
 ## 7. npm 发布清单
 

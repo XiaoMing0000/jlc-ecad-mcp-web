@@ -22,13 +22,12 @@ export const libraryTools: EcadToolDefinition[] = [
   },
   {
     name: 'library_delete_libraries',
-    description:
-      'Delete symbol libraries in bulk\n\nDelete each symbol library in `uuids`; missing records are skipped (idempotent) and an empty object is returned when done.',
-    path: '/api/editor/libraries',
+    description: 'Delete a symbol library\n\nDelete the symbol library referenced by `uuid`; call the tool once per library.',
+    path: '/api/editor/libraries/symbols/:uuid',
     method: 'DELETE',
     danger: true,
     inputSchema: z.looseObject({
-      uuids: z.array(z.string()).describe('Symbol library UUIDs (at least 1)'),
+      uuid: z.string().describe('Symbol library UUID'),
     }),
   },
   {

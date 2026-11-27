@@ -53,15 +53,12 @@ export const symbolTools: EcadToolDefinition[] = [
   },
   {
     name: 'symbol_delete_symbol',
-    description:
-      'Delete symbols in bulk\n\nDelete each symbol named in `titles` from the `ownerUuid` symbol library; throws `DATA_NOT_FOUND` when the library does not exist.',
+    description: 'Delete symbols in bulk\n\nDelete each symbol referenced by `uuids`; at least 1 symbol UUID is required.',
     path: '/api/editor/symbols/batches',
     method: 'DELETE',
     danger: true,
-    ownerParams: { optional: [], required: ['ownerUuid'] },
     inputSchema: z.looseObject({
-      titles: z.array(z.string()).describe('Symbol titles (at least 1)'),
-      ownerUuid: z.string().describe('Symbol library UUID'),
+      uuids: z.array(z.string()).min(1).describe('Symbol UUIDs (at least 1)'),
     }),
   },
   {

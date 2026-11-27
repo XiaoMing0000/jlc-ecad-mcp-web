@@ -111,7 +111,19 @@ const mock = createServer((req, res) => {
       return;
     }
 
-    if (url.pathname.startsWith('/api/editor/macro/') && url.pathname.endsWith('/macroDataUuid')) {
+    if (url.pathname.startsWith('/api/editor/libraries/symbols/') && req.method === 'DELETE') {
+      res.setHeader('Content-Type', 'application/json');
+      res.end(JSON.stringify({ success: true, code: 200, result: {} }));
+      return;
+    }
+
+    if (url.pathname === '/api/editor/macro' && req.method === 'GET') {
+      res.setHeader('Content-Type', 'application/json');
+      res.end(JSON.stringify({ success: true, code: 200, result: { uuid: 'm/2', variables: [{ type: 1, uuid: 'md-2' }] } }));
+      return;
+    }
+
+    if (url.pathname.startsWith('/api/editor/macro/') && req.method === 'PUT') {
       res.setHeader('Content-Type', 'application/json');
       res.end(JSON.stringify({ success: true, code: 200, result: { uploaded: true } }));
       return;
@@ -187,6 +199,12 @@ const mock = createServer((req, res) => {
       return;
     }
 
+    if (url.pathname === '/api/editor/product/search') {
+      res.setHeader('Content-Type', 'application/json');
+      res.end(JSON.stringify({ success: true, code: 200, result: { list: [{ uuid: 'product-1' }] } }));
+      return;
+    }
+
     if (url.pathname === '/api/editor/product/tree') {
       res.setHeader('Content-Type', 'application/json');
       res.end(JSON.stringify({ success: true, code: 200, result: [{ id: 'cat-1' }] }));
@@ -212,6 +230,12 @@ const mock = createServer((req, res) => {
       } else {
         res.end(JSON.stringify({ success: true, code: 200, result: { ok: true } }));
       }
+      return;
+    }
+
+    if (url.pathname === '/api/editor/parts/list' && req.method === 'POST') {
+      res.setHeader('Content-Type', 'application/json');
+      res.end(JSON.stringify({ success: true, code: 200, result: { list: [], page: 1, pageSize: 10 } }));
       return;
     }
 
@@ -249,6 +273,12 @@ const mock = createServer((req, res) => {
     if (url.pathname === '/api/editor/user/search') {
       res.setHeader('Content-Type', 'application/json');
       res.end(JSON.stringify({ success: true, code: 200, result: [{ uuid: 'user-2' }] }));
+      return;
+    }
+
+    if (url.pathname === '/api/editor/user/update' && req.method === 'POST') {
+      res.setHeader('Content-Type', 'application/json');
+      res.end(JSON.stringify({ success: true, code: 200, result: { updated: true } }));
       return;
     }
 
@@ -372,12 +402,23 @@ async function callTool(client) {
 
   const list = await client.request('tools/list', {});
   const listedNames = list.result.tools.map((tool) => tool.name);
-  assert.equal(listedNames.length, 146);
+  assert.equal(listedNames.length, 141);
   assert.equal(new Set(listedNames).size, listedNames.length);
   assert.ok(listedNames.includes('jlc_ecad_get_user'));
   assert.ok(listedNames.includes('jlc_ecad_login'));
   assert.ok(listedNames.includes('part_detail_part'));
   assert.ok(listedNames.includes('project_update_project'));
+  for (const removed of ['config_index', 'system_attribute_get_preference', 'system_attribute_get_proxy_url', 'eplan_macro_read', 'form_copy_form']) {
+    assert.ok(!listedNames.includes(removed), `${removed} should not be registered`);
+  }
+  const deleteForm = list.result.tools.find((tool) => tool.name === 'form_delete_form');
+  assert.ok(deleteForm, 'form_delete_form should be registered');
+  assert.deepEqual(Object.keys(deleteForm.inputSchema.properties ?? {}).sort(), ['ownerUuid', 'uuid']);
+
+  const deleteLibrary = list.result.tools.find((tool) => tool.name === 'library_delete_libraries');
+  assert.ok(deleteLibrary, 'library_delete_libraries should be registered');
+  assert.deepEqual(Object.keys(deleteLibrary.inputSchema.properties ?? {}), ['uuid']);
+  assert.ok(deleteLibrary.inputSchema.required?.includes('uuid'));
 
   const call = await callTool(client);
   assert.equal(call.result.isError, true);
@@ -916,8 +957,8 @@ async function callTool(client) {
   const posted = await client.request('tools/call', { name: 'jlc_ecad_list_products_post', arguments: query });
   assert.equal(posted.result.isError, undefined, posted.result.content[0].text);
   assert.equal(requests.at(-1).method, 'POST');
-  assert.equal(requests.at(-1).url, '/api/editor/product/list');
-  assert.deepEqual(JSON.parse(requests.at(-1).body), query);
+  assert.equal(requests.at(-1).url, '/api/editor/product/search');
+  assert.deepEqual(JSON.parse(requests.at(-1).body), { pageNum: 1, pageSize: 20, keyword: '10k' });
 
   const tree = await client.request('tools/call', { name: 'jlc_ecad_get_product_tree', arguments: {} });
   assert.equal(tree.result.isError, undefined, tree.result.content[0].text);
@@ -1002,12 +1043,12 @@ async function callTool(client) {
 
   const listed = await client.request('tools/call', {
     name: 'jlc_ecad_list_categories',
-    arguments: { user_uuid: 'u1', type: 6 },
+    arguments: { user_uuid: 'u1', type: [6] },
   });
   assert.equal(listed.result.isError, undefined, listed.result.content[0].text);
   assert.match(listed.result.content[0].text, /cat-1/);
   assert.equal(requests.at(-1).method, 'GET');
-  assert.equal(requests.at(-1).url, '/api/editor/categories?user_uuid=u1&type=6');
+  assert.equal(requests.at(-1).url, '/api/editor/categories?user_uuid=u1&type%5B%5D=6');
 
   const updated = await client.request('tools/call', {
     name: 'jlc_ecad_update_category',
@@ -1049,14 +1090,86 @@ async function callTool(client) {
 
   const uploaded = await client.request('tools/call', {
     name: 'jlc_ecad_upload_macro_data',
-    arguments: { uuid: 'm/1', dataBase64: Buffer.from('macro-data').toString('base64') },
+    arguments: { uuid: 'm/1', macroDataUuid: 'md/1', dataBase64: Buffer.from('macro-data').toString('base64') },
   });
   assert.equal(uploaded.result.isError, undefined, uploaded.result.content[0].text);
   assert.match(uploaded.result.content[0].text, /uploaded/);
   assert.equal(requests.at(-1).method, 'PUT');
-  assert.equal(requests.at(-1).url, '/api/editor/macro/m%2F1/macroDataUuid');
+  assert.equal(requests.at(-1).url, '/api/editor/macro/m%2F1/md%2F1');
   assert.equal(requests.at(-1).body, 'macro-data');
   assert.equal(requests.at(-1).headers['content-type'], 'stream');
+
+  // Without macroDataUuid the tool resolves it from the macro detail variables.
+  const resolved = await client.request('tools/call', {
+    name: 'jlc_ecad_upload_macro_data',
+    arguments: { uuid: 'm/2', type: 1, dataBase64: Buffer.from('resolved-data').toString('base64') },
+  });
+  assert.equal(resolved.result.isError, undefined, resolved.result.content[0].text);
+  assert.match(resolved.result.content[0].text, /uploaded/);
+  assert.equal(requests.at(-2).method, 'GET');
+  assert.equal(requests.at(-2).url, '/api/editor/macro?uuid=m%2F2');
+  assert.equal(requests.at(-1).method, 'PUT');
+  assert.equal(requests.at(-1).url, '/api/editor/macro/m%2F2/md-2');
+  assert.equal(requests.at(-1).body, 'resolved-data');
+
+  await client.close();
+}
+
+// 17b) Imported library delete uses the per-UUID route with path encoding.
+{
+  const client = makeClient({ JLC_ECAD_COOKIE: 'VEN-SESSION=valid' });
+  await client.request('initialize', initialize);
+  client.notify('notifications/initialized', {});
+
+  const denied = await client.request('tools/call', {
+    name: 'library_delete_libraries',
+    arguments: { uuid: 'lib/1' },
+  });
+  assert.equal(denied.result.isError, true);
+  assert.match(denied.result.content[0].text, /destructive/);
+
+  const deleted = await client.request('tools/call', {
+    name: 'library_delete_libraries',
+    arguments: { uuid: 'lib/1', __confirm: true },
+  });
+  assert.equal(deleted.result.isError, undefined, deleted.result.content[0].text);
+  assert.equal(requests.at(-1).method, 'DELETE');
+  assert.equal(requests.at(-1).url, '/api/editor/libraries/symbols/lib%2F1');
+  assert.equal(requests.at(-1).body, '{}');
+
+  await client.close();
+}
+
+// 17c) Imported part list sends the frontend-compatible POST body.
+{
+  const client = makeClient({ JLC_ECAD_COOKIE: 'VEN-SESSION=valid' });
+  await client.request('initialize', initialize);
+  client.notify('notifications/initialized', {});
+
+  const listed = await client.request('tools/call', {
+    name: 'part_get_part_list',
+    arguments: {
+      ownerUuid: 'u1',
+      type: 1,
+      category: [['22001', 'test']],
+      attrIds: ['22001', '22024'],
+      keyword: 'resistor',
+      page: 1,
+      pageSize: 10,
+    },
+  });
+  assert.equal(listed.result.isError, undefined, listed.result.content[0].text);
+  assert.equal(requests.at(-1).method, 'POST');
+  assert.equal(requests.at(-1).url, '/api/editor/parts/list');
+  assert.deepEqual(JSON.parse(requests.at(-1).body), {
+    ownerUuid: 'u1',
+    type: 1,
+    category: [['22001', 'test']],
+    attrIds: ['22001', '22024'],
+    keyword: 'resistor',
+    page: 1,
+    pageSize: 10,
+  });
 
   await client.close();
 }
@@ -1118,9 +1231,8 @@ async function callTool(client) {
     arguments: { teamUuid: 't1' },
   });
   assert.equal(info.result.isError, undefined, info.result.content[0].text);
-  assert.equal(requests.at(-1).method, 'POST');
+  assert.equal(requests.at(-1).method, 'GET');
   assert.equal(requests.at(-1).url, '/api/editor/teams/t1/teamInfo');
-  assert.equal(requests.at(-1).body, '{}');
 
   const updated = await client.request('tools/call', {
     name: 'jlc_ecad_update_team',
@@ -1231,7 +1343,7 @@ async function callTool(client) {
   });
   assert.equal(updated.result.isError, undefined, updated.result.content[0].text);
   assert.equal(requests.at(-1).method, 'POST');
-  assert.equal(requests.at(-1).url, '/api/editor/user');
+  assert.equal(requests.at(-1).url, '/api/editor/user/update');
   assert.deepEqual(JSON.parse(requests.at(-1).body), { nickname: 'Demo', avatar: 'avatar.png' });
 
   const byUuid = await client.request('tools/call', {

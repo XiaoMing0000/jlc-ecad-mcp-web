@@ -132,7 +132,7 @@ export function createServer(version: string): McpServer {
         'JLC EDA editor API tools. Authentication uses the locally saved JLC EDA session. ' +
         'If a tool reports a 401, ask the user whether they want to sign in and prefer `npx -y jlc-ecad-mcp login`. ' +
         'Destructive tools require {"__confirm": true} after the user confirms. ' +
-        'Catalog tools were imported from the JLC ECAD desktop app; some system_* tools are served by the local app.',
+        'Catalog tools were imported from the JLC ECAD desktop app; tools that only work against its local server are not registered.',
     },
   );
 

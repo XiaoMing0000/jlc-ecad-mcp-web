@@ -146,7 +146,97 @@ function domainOf(path) {
 // cannot be called through this MCP server and are not generated.
 const excludedDomains = new Set(['client']);
 
-const includedRows = rows.filter((row) => !excludedDomains.has(domainOf(row.path)));
+// Tools that only work against the desktop app's local server or are rejected
+// by the public API; they are not registered.
+const excludedTools = new Set([
+  'config_index',
+  'system_attribute_get_preference',
+  'system_attribute_get_proxy_url',
+  'eplan_macro_read',
+  'form_copy_form',
+]);
+
+const includedRows = rows.filter((row) => !excludedDomains.has(domainOf(row.path)) && !excludedTools.has(row.name));
+const assumedAssumptions = [...assumedGet].filter((name) => includedRows.some((row) => row.name === name));
+
+// MCP tools can expose a narrower parameter set than the desktop catalog.
+// form_delete_form only exposes the single-form `uuid`; the batch `uuids`
+// parameter is not part of the tool surface (the editor frontend uses `uuid`).
+const removedProperties = {
+  form_delete_form: ['uuids'],
+};
+
+// The public API deletes a symbol library through the per-UUID route; the
+// desktop catalog only knows the local bulk route, so replace path and schema.
+const toolOverrides = {
+  library_delete_libraries: {
+    path: '/api/editor/libraries/symbols/:uuid',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        uuid: { type: 'string', format: 'string', description: 'Symbol library UUID' },
+      },
+      required: ['uuid'],
+      additionalProperties: true,
+    },
+  },
+  // The public API lists parts with a POST body; the desktop catalog declares a
+  // GET with a narrower parameter set, and the list route is /parts/list.
+  part_get_part_list: {
+    path: '/api/editor/parts/list',
+    method: 'POST',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        page: { type: 'number', description: 'Page number; defaults to 1' },
+        pageSize: { type: 'number', description: 'Page size; defaults to 20' },
+        ownerUuid: { type: 'string', format: 'string', description: 'Owner UUID (user or team)' },
+        keyword: { type: 'string', format: 'string', description: 'Keyword used to filter the parts' },
+        subCategory: { type: 'boolean', description: 'Subcategory filter flag' },
+        accessory: { type: 'number', description: 'Accessory flag (0 or 1)' },
+        type: {
+          type: 'number',
+          enum: [1, 2, 3, 4, 5],
+          description: 'Part type: 1 part / 2 accessory / 3 drill / 4 supplier / 5 3D model',
+        },
+        attrIds: {
+          type: 'array',
+          items: { type: 'string', format: 'string' },
+          description: 'Attribute IDs to return, e.g. `["22001", "22024"]`',
+        },
+        category: {
+          type: 'array',
+          items: {
+            type: 'array',
+            items: { type: 'string', format: 'string' },
+            minItems: 2,
+            maxItems: 2,
+          },
+          minItems: 1,
+          description: 'Attribute filters; each entry is `[attribute ID, value]`, e.g. `[["22001", "test"], ["22014", "1"]]`',
+        },
+      },
+      required: ['ownerUuid', 'type'],
+      additionalProperties: true,
+    },
+  },
+  // The public batch-delete route takes symbol UUIDs, not titles/ownerUuid.
+  symbol_delete_symbol: {
+    inputSchema: {
+      type: 'object',
+      properties: {
+        uuids: {
+          type: 'array',
+          items: { type: 'string', format: 'string' },
+          minItems: 1,
+          description: 'Symbol UUIDs (at least 1)',
+        },
+      },
+      required: ['uuids'],
+      additionalProperties: true,
+    },
+  },
+};
 
 // The desktop catalog describes local files and directories. The web API works
 // with owners and UUIDs instead, so those details are removed from the text
@@ -254,9 +344,8 @@ const englishToolDescriptions = {
     'Create a form history snapshot\n\nPath parameters must be URL-encoded by the caller; the server decodes them. ' +
     '`historyUuid` is validated only; the save target is determined by `formUuid`.</br>Always returns an empty object.',
   form_delete_form:
-    'Delete forms\n\nHard-delete forms, removing both the record and its data.</br>' +
-    'Provide either `uuid` (single) or `uuids` (array); `uuid` takes precedence, and nothing is deleted when both are absent.</br>' +
-    '`ownerUuid` is validated only; records are located by `uuid`/`uuids`.</br>Throws `DATA_NOT_FOUND` when a record does not exist.',
+    'Delete a form\n\nHard-delete a single form by `uuid`, removing both the record and its data.</br>' +
+    '`ownerUuid` is validated only; the record is located by `uuid`.</br>Throws `DATA_NOT_FOUND` when the record does not exist.',
   form_get_form_detail:
     'Get form details\n\nLook up a form by `uuid`, which is required.</br>' +
     'When `type` is provided it is checked and a mismatch throws `DATA_NOT_FOUND`; when `name` is provided it is used as the returned `name`, otherwise the stored name is used. ' +
@@ -292,8 +381,7 @@ const englishToolDescriptions = {
     'Update a layer\n\nUpdate layer attributes by `uuid`.</br>`uuid` is the layer UUID; path parameters must be URL-encoded by the caller and the server decodes them.</br>' +
     'Throws `REQUEST_PARAM_ILLEGAL` when parameters are missing or have the wrong type.',
   library_create_library: 'Create a symbol library\n\nCreate a symbol library named `name` under `ownerUuid`.',
-  library_delete_libraries:
-    'Delete symbol libraries in bulk\n\nDelete each symbol library in `uuids`; missing records are skipped (idempotent) and an empty object is returned when done.',
+  library_delete_libraries: 'Delete a symbol library\n\nDelete the symbol library referenced by `uuid`; call the tool once per library.',
   library_detail_library:
     'Get symbol library details\n\nRead the record referenced by `uuid` and return its metadata; throws `DUPLICATE_DATA` when it does not exist.</br>' +
     '`uuid` is the symbol library UUID; path parameters must be URL-encoded by the caller and the server decodes them.',
@@ -327,7 +415,15 @@ const englishToolDescriptions = {
     'Add part accessories\n\nAppend accessory references to a part; referencing the part itself is forbidden, and a duplicate reference throws `DUPLICATE_DATA`.',
   part_add_drill_cut: 'Add drill-layout cuts\n\n`drillUuid` must reference a drill-layout part (`type` 3).',
   part_add_templates: 'Add part function templates\n\nA non-empty `macroUuid` must reference an existing macro, otherwise `FORBIDDEN` is thrown.',
-  part_create_part: 'Create a part\n\nCreate part data under `owner_uuid` with the given `type`; `attributes` must not be empty.',
+  part_create_part:
+    'Create a part\n\nCreate part data under `owner_uuid` with the given `type`; `attributes` must not be empty and must contain the keys required by that type:</br>' +
+    '- `type` 1 (part): `22001`, `22024`</br>' +
+    '- `type` 2 (accessory): `22960`</br>' +
+    '- `type` 3 (drill): `22931`</br>' +
+    '- `type` 4 (supplier): `22900`</br>' +
+    '- `type` 5 (3D model): `11018`</br>' +
+    'Each attribute value is `{ value: string, ...extra fields }`, e.g. ' +
+    '`{"owner_uuid": "<uuid>", "type": 1, "accessory": 0, "attributes": {"22001": {"value": "Test part"}, "22024": {"value": "1"}}}`.',
   part_data_exists: 'Check whether a part exists\n\nDecide by `name` + `type` (+ `variable`) whether the part data exists and return a boolean.',
   part_delete_accessories:
     'Delete part accessories\n\nWhen `uuids` is provided only those records are deleted; otherwise all accessories of the part are cleared.',
@@ -344,7 +440,10 @@ const englishToolDescriptions = {
     'Get a part by name\n\nFind a part by number, type, and owner; when `minVariable` is true the record with the smallest variable is returned.',
   part_get_part_categories:
     'Get parts by category level\n\nReturn the parts of the owner, type, and accessory state; `attributes` contains only the attribute IDs selected by `category`.',
-  part_get_part_list: 'List parts of an owner\n\nReturn the parts under `owner_uuid`, newest first, paginated.',
+  part_get_part_list:
+    'List parts of an owner\n\nReturn the parts under `ownerUuid`, newest first, paginated.</br>' +
+    '`type` is required; `category` filters by attribute values and must contain non-empty `[attribute ID, value]` pairs, e.g. `[["22001", "test"], ["22014", "1"]]`; ' +
+    '`attrIds` selects the attribute IDs to return, e.g. `["22001", "22024"]`.',
   part_list_accessories: 'List part accessories\n\nReturn the accessory references of the part.',
   part_list_drill_cut: 'List drill-layout cuts\n\n`drillUuid` must reference a drill-layout part (`type` 3).',
   part_list_parts: 'List parts with filters\n\n`category` is an array of [attribute ID, attribute value]; `keyword` fuzzy-matches the part number.',
@@ -447,8 +546,7 @@ const englishToolDescriptions = {
     'Create a symbol history snapshot\n\nCreate a snapshot for a symbol history record; the body may be JSON (`dataStr`) or a raw stream.</br>' +
     '`uuid` is the symbol UUID and `historyUuid` is the history record UUID; path parameters must be URL-encoded by the caller and the server decodes them.</br>' +
     'Throws `REQUEST_PARAM_ILLEGAL` when parameters are missing or malformed, and `DATA_NOT_FOUND` when the symbol does not exist.',
-  symbol_delete_symbol:
-    'Delete symbols in bulk\n\nDelete each symbol named in `titles` from the `ownerUuid` symbol library; throws `DATA_NOT_FOUND` when the library does not exist.',
+  symbol_delete_symbol: 'Delete symbols in bulk\n\nDelete each symbol referenced by `uuids`; at least 1 symbol UUID is required.',
   symbol_delete_symbol_by_uuid:
     'Delete a symbol\n\nDelete a symbol by `uuid`.</br>`uuid` is the symbol UUID; path parameters must be URL-encoded by the caller and the server decodes them.',
   symbol_search_symbol_history_list:
@@ -575,7 +673,7 @@ const englishPropertyDescriptions = {
   '自定义属性（必填）': 'Custom attributes (required)',
   '表单 UUID': 'Form UUID',
   '表单 UUID 列表（与 uuid 二选一，至少 1 个）': 'Form UUIDs (provide either this or `uuid`; at least 1)',
-  '表单 UUID（与 uuids 二选一，优先使用）': 'Form UUID (provide either this or `uuids`; this takes precedence)',
+  '表单 UUID（与 uuids 二选一，优先使用）': 'Form UUID',
   表单名称: 'Form name',
   '表单名称，传入时触发重命名': 'Form name; a different value renames the form',
   表单属性: 'Form attributes',
@@ -586,7 +684,8 @@ const englishPropertyDescriptions = {
   '连接点逻辑，缺省为空对象': 'Connection-point logic; defaults to an empty object',
   '部件 UUID': 'Part UUID',
   '部件 UUID 列表': 'Part UUID list',
-  '部件属性，键为属性 ID，值为 { value }': 'Part attributes; keys are attribute IDs and values are `{ value }`',
+  '部件属性，键为属性 ID，值为 { value }':
+    'Part attributes keyed by attribute ID; each value is an object with a `value` string plus optional extra fields of any type, e.g. `{"22001": {"value": "1", "test": 23}}`',
   部件类型: 'Part type',
   '部件类型，默认 1': 'Part type; defaults to 1',
   '部件类型：1 部件 / 2 附件 / 3 钻孔 / 4 供应商 / 5 3D 模型': 'Part type: 1 part / 2 accessory / 3 drill / 4 supplier / 5 3D model',
@@ -683,12 +782,21 @@ function sanitizeSchema(schema, toolName, path) {
 }
 
 for (const row of includedRows) {
+  for (const key of removedProperties[row.name] ?? []) {
+    if (row.inputSchema?.properties) {
+      delete row.inputSchema.properties[key];
+    }
+    if (Array.isArray(row.inputSchema?.required)) {
+      row.inputSchema.required = row.inputSchema.required.filter((required) => required !== key);
+    }
+  }
   const english = englishToolDescriptions[row.name];
   row.description = english ?? sanitizeDescription(row.description);
   if (english === undefined) {
     untranslated.push(`${row.name}: tool description`);
   }
   sanitizeSchema(row.inputSchema, row.name, '');
+  Object.assign(row, toolOverrides[row.name] ?? {});
 }
 
 if (untranslated.length > 0) {
@@ -737,7 +845,7 @@ mkdirSync(outputDir, { recursive: true });
  * Render the desktop app's JSON Schema as a Zod expression.
  *
  * The catalog only uses object/string/number/array/boolean types, string and
- * number enums, descriptions, `required`, `minItems`, and
+ * number enums, descriptions, `required`, `minItems`/`maxItems`, and
  * `additionalProperties: true`, so this small subset is enough. Objects are
  * emitted as `z.looseObject` because the executor accepts extra keys such as
  * `__confirm` and `__query`.
@@ -771,8 +879,15 @@ function renderZodSchema(schema, indent) {
     code = entries.length === 0 ? `${factory}({})` : `${factory}({\n${entries.join('\n')}\n${pad}})`;
   } else if (schema.type === 'array' || schema.items !== undefined) {
     code = `z.array(${renderZodSchema(schema.items ?? {}, indent)})`;
-    if (typeof schema.minItems === 'number') {
-      code += `.min(${schema.minItems})`;
+    if (typeof schema.minItems === 'number' && schema.minItems === schema.maxItems) {
+      code += `.length(${schema.minItems})`;
+    } else {
+      if (typeof schema.minItems === 'number') {
+        code += `.min(${schema.minItems})`;
+      }
+      if (typeof schema.maxItems === 'number') {
+        code += `.max(${schema.maxItems})`;
+      }
     }
   } else if (schema.type === 'string') {
     code = 'z.string()';
@@ -872,7 +987,12 @@ shared helper \`format.ts\`.
 - Tools: ${includedRows.length}
 - Destructive tools: ${includedRows.filter((row) => row.danger).length}
 - Excluded domains (desktop-app local server only): ${[...excludedDomains].join(', ')}
-- Assumed HTTP methods (no matching local route): ${[...assumedGet].filter((name) => includedRows.some((row) => row.name === name)).join(', ')}
+- Excluded tools (local-server-only or rejected by the public API): ${[...excludedTools].join(', ')}${
+  assumedAssumptions.length > 0
+    ? `
+- Assumed HTTP methods (no matching local route): ${assumedAssumptions.join(', ')}`
+    : ''
+}
 
 Each generated file contains one domain and exports an
 \`EcadToolDefinition[]\` whose \`inputSchema\` is a Zod schema converted from the
@@ -882,9 +1002,9 @@ wording instead of the desktop app's local file and directory details. The
 executor in \`src/ecad/executor.ts\` calls the corresponding endpoint under
 \`JLC_ECAD_BASE_URL\`.
 
-Some \`system_*\` tools are implemented by the desktop app's local server rather
-than the public website. Point \`JLC_ECAD_BASE_URL\` at that local server when
-using them.
+Tools that only work against the desktop app's local server, and tools the
+public API rejects, are listed under "Excluded tools" above and are not
+generated.
 
 Regenerate after a JLC ECAD update:
 
